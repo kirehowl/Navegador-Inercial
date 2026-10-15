@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Navegador Inercial - Registro de GPS y Sensores por Paso</title>
+    <title>Navegador Inercial - Registro, Exportación y Reinicio</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -93,6 +93,18 @@
         .btn-action:active {
             background-color: #047857;
         }
+        .btn-export {
+            background-color: #0284c7;
+        }
+        .btn-export:active {
+            background-color: #0369a1;
+        }
+        .btn-reset {
+            background-color: #dc2626;
+        }
+        .btn-reset:active {
+            background-color: #b91c1c;
+        }
         .log-container {
             font-size: 0.75rem;
             color: #cbd5e1;
@@ -109,39 +121,43 @@
 </head>
 <body>
 
-    <h1>Registro de GPS y Sensores</h1>
+    <h1>Registro y Exportación de Sensores</h1>
 
     <!-- Botón obligatorio para permisos en móviles -->
     <button id="permission-btn" onclick="requestSensors()">Activar Sensores y GPS</button>
 
     <div class="dashboard">
-        <!-- 1. GPS con límite de 5000 registros -->
+        <!-- Botón General para Reiniciar Prueba -->
+        <button class="btn-action btn-reset" onclick="resetTest()" style="padding: 12px; font-size: 1rem; margin-bottom: 5px;">🔄 Reiniciar Prueba / Restablecer</button>
+
+        <!-- 1. GPS con límite de 5000 registros y exportación -->
         <div class="card">
             <h2>📍 GPS (Máx. 5000 Registros)</h2>
             <div class="data-row"><span class="label">Latitud:</span> <span id="gps-lat" class="value">0.000000</span></div>
             <div class="data-row"><span class="label">Longitud:</span> <span id="gps-lon" class="value">0.000000</span></div>
             <div class="data-row"><span class="label">Precisión GPS:</span> <span id="gps-acc" class="value">0.0</span> m</div>
             <div class="data-row"><span class="label">Registros Guardados:</span> <span id="gps-count" class="value">0 / 5000</span></div>
+            
             <button class="btn-action" onclick="saveGPSPoint()">💾 Guardar Coordenada GPS</button>
+            <button class="btn-action btn-export" onclick="exportGPSCSV()">📥 Exportar GPS a CSV</button>
             <div id="gps-log" class="log-container">Aún no hay coordenadas GPS guardadas.</div>
         </div>
 
-        <!-- 2. Conteo de pasos y registro por paso de Acelerómetro y Giroscopio -->
+        <!-- 2. Conteo de pasos, registro por paso de Sensores y exportación -->
         <div class="card">
             <h2>🚶‍♂️ Pasos & Sensores Inerciales</h2>
             <div class="data-row"><span class="label">Pasos Totales:</span> <span id="step-count" class="value highlight">0</span></div>
             
-            <h3 style="font-size: 0.9rem; color: #38bdf8; margin: 12px 0 6px 0;">Últimos valores instantáneos:</h3>
+            <h3 style="font-size: 0.9rem; color: #38bdf8; margin: 12px 0 6px 0;">Valores instantáneos:</h3>
             <div class="data-row"><span class="label">Acelerómetro (X,Y,Z):</span> <span id="live-acc" class="value">0, 0, 0</span></div>
             <div class="data-row"><span class="label">Giroscopio (X,Y,Z):</span> <span id="live-gyro" class="value">0, 0, 0</span></div>
             
-            <button class="btn-action" style="background-color: #0284c7;" onclick="clearStepLogs()">Limpiar Historial de Pasos</button>
+            <button class="btn-action btn-export" onclick="exportStepsCSV()">📥 Exportar Pasos y Sensores a CSV</button>
             <div id="step-log" class="log-container">Los datos de los sensores al dar un paso aparecerán aquí.</div>
         </div>
     </div>
 
     <script>
-        // Estructuras de datos globales
         let sensorData = {
             accel: { x: 0, y: 0, z: 0 },
             gyro: { x: 0, y: 0, z: 0 },
@@ -150,8 +166,8 @@
 
         let stepCount = 0;
         let lastStepTime = 0;
-        let savedGPSPoints = [];
-        let stepLogs = [];
+        let savedGPSPoints = []; 
+        let stepLogs = [];       
 
         function requestSensors() {
             if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
@@ -166,7 +182,7 @@
         }
 
         function startSystem() {
-            // 1. Acelerómetro y Giroscopio combinados
+            // 1. Acelerómetro y Giroscopio
             window.addEventListener('devicemotion', (event) => {
                 let acc = event.accelerationIncludingGravity;
                 if (acc) {
@@ -182,16 +198,19 @@
                         stepCount++;
                         lastStepTime = now;
 
-                        // Registrar datos de los sensores en este paso exacto
+                        // Almacenar los datos de los sensores en este paso exacto
                         let currentStepData = {
                             step: stepCount,
-                            time: new Date().toLocaleTimeString(),
-                            accel: { ...sensorData.accel },
-                            gyro: { ...sensorData.gyro }
+                            timestamp: new Date().toISOString(),
+                            accelX: sensorData.accel.x,
+                            accelY: sensorData.accel.y,
+                            accelZ: sensorData.accel.z,
+                            gyroX: sensorData.gyro.x,
+                            gyroY: sensorData.gyro.y,
+                            gyroZ: sensorData.gyro.z
                         };
                         
-                        stepLogs.unshift(currentStepData); // Agregar al inicio del arreglo
-                        if (stepLogs.length > 5000) stepLogs.pop(); // Límite de seguridad
+                        stepLogs.push(currentStepData);
                     }
                 }
 
@@ -220,7 +239,7 @@
             setInterval(refreshUI, 100);
         }
 
-        // Función para guardar coordenada GPS (máximo 5000 registros)
+        // Guardar coordenada GPS (máximo 5000 registros)
         function saveGPSPoint() {
             if (sensorData.gps.rawLat === null) {
                 alert("Esperando señal GPS...");
@@ -231,35 +250,86 @@
                 return;
             }
 
-            let pointInfo = `[${new Date().toLocaleTimeString()}] Lat: ${sensorData.gps.lat}, Lon: ${sensorData.gps.lon} (Precisión: ${sensorData.gps.accuracy}m)`;
-            savedGPSPoints.push(pointInfo);
+            let pointData = {
+                timestamp: new Date().toISOString(),
+                latitud: sensorData.gps.lat,
+                longitud: sensorData.gps.lon,
+                precision: sensorData.gps.accuracy
+            };
+            
+            savedGPSPoints.push(pointData);
 
-            // Actualizar interfaz GPS
             document.getElementById('gps-count').innerText = `${savedGPSPoints.length} / 5000`;
-            document.getElementById('gps-log').innerHTML = savedGPSPoints.slice(-50).reverse().join('<br>'); // Muestra los últimos 50 en pantalla
+            document.getElementById('gps-log').innerHTML = savedGPSPoints.slice(-50).reverse().map(p => 
+                `[${p.timestamp.split('T')[1].slice(0,8)}] Lat: ${p.latitud}, Lon: ${p.longitud} (${p.precision}m)`
+            ).join('<br>');
         }
 
-        function clearStepLogs() {
-            stepLogs = [];
-            stepCount = 0;
-            document.getElementById('step-log').innerHTML = "Historial limpiado.";
+        // Función para restablecer / reiniciar prueba
+        function resetTest() {
+            if (confirm("¿Estás seguro de que deseas reiniciar la prueba? Se borrarán todos los registros de pasos y GPS almacenados.")) {
+                stepCount = 0;
+                lastStepTime = 0;
+                savedGPSPoints = [];
+                stepLogs = [];
+
+                // Restablecer interfaz visual
+                document.getElementById('gps-count').innerText = "0 / 5000";
+                document.getElementById('gps-log').innerHTML = "Aún no hay coordenadas GPS guardadas.";
+                document.getElementById('step-count').innerText = "0";
+                document.getElementById('step-log').innerHTML = "Los datos de los sensores al dar un paso aparecerán aquí.";
+            }
+        }
+
+        // Exportar GPS a CSV
+        function exportGPSCSV() {
+            if (savedGPSPoints.length === 0) {
+                alert("No hay registros GPS guardados para exportar.");
+                return;
+            }
+            let csvContent = "data:text/csv;charset=utf-8,Timestamp,Latitud,Longitud,Precision_m\r\n";
+            savedGPSPoints.forEach(row => {
+                csvContent += `${row.timestamp},${row.latitud},${row.longitud},${row.precision}\r\n`;
+            });
+            downloadFile(csvContent, "registros_gps.csv");
+        }
+
+        // Exportar Pasos y Sensores a CSV
+        function exportStepsCSV() {
+            if (stepLogs.length === 0) {
+                alert("No hay registros de pasos para exportar.");
+                return;
+            }
+            let csvContent = "data:text/csv;charset=utf-8,Paso,Timestamp,Accel_X,Accel_Y,Accel_Z,Gyro_X,Gyro_Y,Gyro_Z\r\n";
+            stepLogs.forEach(row => {
+                csvContent += `${row.step},${row.timestamp},${row.accelX},${row.accelY},${row.accelZ},${row.gyroX},${row.gyroY},${row.gyroZ}\r\n`;
+            });
+            downloadFile(csvContent, "registros_sensores_pasos.csv");
+        }
+
+        // Función auxiliar para descargar archivos
+        function downloadFile(content, fileName) {
+            let encodedUri = encodeURI(content);
+            let link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", fileName);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
 
         function refreshUI() {
-            // Actualizar GPS en vivo
             document.getElementById('gps-lat').innerText = sensorData.gps.lat;
             document.getElementById('gps-lon').innerText = sensorData.gps.lon;
             document.getElementById('gps-acc').innerText = sensorData.gps.accuracy;
 
-            // Actualizar Pasos y Sensores en vivo
             document.getElementById('step-count').innerText = stepCount;
             document.getElementById('live-acc').innerText = `${sensorData.accel.x}, ${sensorData.accel.y}, ${sensorData.accel.z}`;
             document.getElementById('live-gyro').innerText = `${sensorData.gyro.x}, ${sensorData.gyro.y}, ${sensorData.gyro.z}`;
 
-            // Actualizar log de pasos registrados
             if (stepLogs.length > 0) {
-                let logHtml = stepLogs.slice(0, 30).map(s => 
-                    `Paso #${s.step} [${s.time}] -> Accel: [${s.accel.x}, ${s.accel.y}, ${s.accel.z}] | Gyro: [${s.gyro.x}, ${s.gyro.y}, ${s.gyro.z}]`
+                let logHtml = stepLogs.slice(-30).reverse().map(s => 
+                    `Paso #${s.step} -> Accel: [${s.accelX}, ${s.accelY}, ${s.accelZ}] | Gyro: [${s.gyroX}, ${s.gyroY}, ${s.gyroZ}]`
                 ).join('<br>');
                 document.getElementById('step-log').innerHTML = logHtml;
             }
