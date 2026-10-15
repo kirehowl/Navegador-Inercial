@@ -1,339 +1,283 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Navegador Inercial - Registro, Exportación y Reinicio</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #0f172a;
-            color: #f8fafc;
-            margin: 0;
-            padding: 15px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        h1 {
-            font-size: 1.3rem;
-            margin-bottom: 10px;
-            text-align: center;
-            color: #38bdf8;
-        }
-        #permission-btn {
-            background-color: #0284c7;
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            font-size: 1rem;
-            font-weight: bold;
-            border-radius: 8px;
-            cursor: pointer;
-            margin-bottom: 15px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            width: 100%;
-            max-width: 450px;
-        }
-        #permission-btn:active {
-            background-color: #0369a1;
-        }
-        .dashboard {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 12px;
-            width: 100%;
-            max-width: 450px;
-        }
-        .card {
-            background-color: #1e293b;
-            border-radius: 12px;
-            padding: 12px 15px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-            border: 1px solid #334155;
-        }
-        .card h2 {
-            font-size: 1rem;
-            margin-top: 0;
-            margin-bottom: 10px;
-            border-bottom: 1px solid #334155;
-            padding-bottom: 5px;
-            color: #7dd3fc;
-        }
-        .data-row {
-            display: flex;
-            justify-content: space-between;
-            margin: 6px 0;
-            font-family: monospace;
-            font-size: 0.95rem;
-        }
-        .label {
-            color: #94a3b8;
-        }
-        .value {
-            color: #38bdf8;
-            font-weight: bold;
-        }
-        .highlight {
-            color: #4ade80;
-            font-size: 1.1rem;
-        }
-        .btn-action {
-            background-color: #059669;
-            color: white;
-            border: none;
-            padding: 8px 12px;
-            font-size: 0.85rem;
-            font-weight: bold;
-            border-radius: 6px;
-            cursor: pointer;
-            width: 100%;
-            margin-top: 8px;
-        }
-        .btn-action:active {
-            background-color: #047857;
-        }
-        .btn-export {
-            background-color: #0284c7;
-        }
-        .btn-export:active {
-            background-color: #0369a1;
-        }
-        .btn-reset {
-            background-color: #dc2626;
-        }
-        .btn-reset:active {
-            background-color: #b91c1c;
-        }
-        .log-container {
-            font-size: 0.75rem;
-            color: #cbd5e1;
-            background-color: #0f172a;
-            border-radius: 6px;
-            padding: 8px;
-            max-height: 120px;
-            overflow-y: auto;
-            margin-top: 8px;
-            font-family: monospace;
-            border: 1px solid #334155;
-        }
-    </style>
-</head>
-<body>
+<h1>Registro y Exportación de Sensores</h1>
 
-    <h1>Registro y Exportación de Sensores</h1>
+<!-- Botón obligatorio para permisos en móviles -->
+<button id="permission-btn" onclick="requestSensors()">Activar Permisos Globales</button>
 
-    <!-- Botón obligatorio para permisos en móviles -->
-    <button id="permission-btn" onclick="requestSensors()">Activar Sensores y GPS</button>
+<div class="dashboard">
+    <!-- Botón General para Reiniciar Prueba -->
+    <button class="btn-action btn-reset" onclick="resetTest()" style="padding: 12px; font-size: 1rem; margin-bottom: 5px;">🔄 Reiniciar Prueba / Restablecer</button>
 
-    <div class="dashboard">
-        <!-- Botón General para Reiniciar Prueba -->
-        <button class="btn-action btn-reset" onclick="resetTest()" style="padding: 12px; font-size: 1rem; margin-bottom: 5px;">🔄 Reiniciar Prueba / Restablecer</button>
-
-        <!-- 1. GPS con límite de 5000 registros y exportación -->
-        <div class="card">
-            <h2>📍 GPS (Máx. 5000 Registros)</h2>
-            <div class="data-row"><span class="label">Latitud:</span> <span id="gps-lat" class="value">0.000000</span></div>
-            <div class="data-row"><span class="label">Longitud:</span> <span id="gps-lon" class="value">0.000000</span></div>
-            <div class="data-row"><span class="label">Precisión GPS:</span> <span id="gps-acc" class="value">0.0</span> m</div>
-            <div class="data-row"><span class="label">Registros Guardados:</span> <span id="gps-count" class="value">0 / 5000</span></div>
-            
-            <button class="btn-action" onclick="saveGPSPoint()">💾 Guardar Coordenada GPS</button>
-            <button class="btn-action btn-export" onclick="exportGPSCSV()">📥 Exportar GPS a CSV</button>
-            <div id="gps-log" class="log-container">Aún no hay coordenadas GPS guardadas.</div>
-        </div>
-
-        <!-- 2. Conteo de pasos, registro por paso de Sensores y exportación -->
-        <div class="card">
-            <h2>🚶‍♂️ Pasos & Sensores Inerciales</h2>
-            <div class="data-row"><span class="label">Pasos Totales:</span> <span id="step-count" class="value highlight">0</span></div>
-            
-            <h3 style="font-size: 0.9rem; color: #38bdf8; margin: 12px 0 6px 0;">Valores instantáneos:</h3>
-            <div class="data-row"><span class="label">Acelerómetro (X,Y,Z):</span> <span id="live-acc" class="value">0, 0, 0</span></div>
-            <div class="data-row"><span class="label">Giroscopio (X,Y,Z):</span> <span id="live-gyro" class="value">0, 0, 0</span></div>
-            
-            <button class="btn-action btn-export" onclick="exportStepsCSV()">📥 Exportar Pasos y Sensores a CSV</button>
-            <div id="step-log" class="log-container">Los datos de los sensores al dar un paso aparecerán aquí.</div>
-        </div>
+    <!-- 1. GPS con límite de 5000 registros, exportación y control de antena -->
+    <div class="card">
+        <h2>📍 GPS (Máx. 5000 Registros)</h2>
+        <div class="data-row"><span class="label">Latitud:</span> <span id="gps-lat" class="value">0.000000</span></div>
+        <div class="data-row"><span class="label">Longitud:</span> <span id="gps-lon" class="value">0.000000</span></div>
+        <div class="data-row"><span class="label">Precisión GPS:</span> <span id="gps-acc" class="value">0.0</span> m</div>
+        <div class="data-row"><span class="label">Registros Guardados:</span> <span id="gps-count" class="value">0 / 5000</span></div>
+        
+        <button id="btn-toggle-gps" class="btn-action btn-toggle-off" onclick="toggleGPSAntenna()">📡 Habilitar Antena GPS</button>
+        <button class="btn-action" onclick="saveGPSPoint()">💾 Guardar Coordenada GPS</button>
+        <button class="btn-action btn-export" onclick="exportGPSCSV()">📥 Exportar GPS a CSV</button>
+        <div id="gps-log" class="log-container">Antena GPS deshabilitada.</div>
     </div>
 
-    <script>
-        let sensorData = {
-            accel: { x: 0, y: 0, z: 0 },
-            gyro: { x: 0, y: 0, z: 0 },
-            gps: { lat: 0, lon: 0, accuracy: 0, rawLat: null, rawLon: null }
-        };
+    <!-- 2. Conteo de pasos, registro por paso de Sensores, exportación y control de sensores -->
+    <div class="card">
+        <h2>🚶‍♂️ Pasos & Sensores Inerciales</h2>
+        <div class="data-row"><span class="label">Pasos Totales:</span> <span id="step-count" class="value highlight">0</span></div>
+        
+        <h3 style="font-size: 0.9rem; color: #38bdf8; margin: 12px 0 6px 0;">Valores instantáneos:</h3>
+        <div class="data-row"><span class="label">Acelerómetro (X,Y,Z):</span> <span id="live-acc" class="value">0, 0, 0</span></div>
+        <div class="data-row"><span class="label">Giroscopio (X,Y,Z):</span> <span id="live-gyro" class="value">0, 0, 0</span></div>
+        
+        <button id="btn-toggle-sensors" class="btn-action btn-toggle-off" onclick="toggleSensorsActive()">⚙️ Habilitar Sensores Inerciales</button>
+        <button class="btn-action btn-export" onclick="exportStepsCSV()">📥 Exportar Pasos y Sensores a CSV</button>
+        <div id="step-log" class="log-container">Sensores inerciales deshabilitados.</div>
+    </div>
+</div>
 
-        let stepCount = 0;
-        let lastStepTime = 0;
-        let savedGPSPoints = []; 
-        let stepLogs = [];       
+<script>
+    let sensorData = {
+        accel: { x: 0, y: 0, z: 0 },
+        gyro: { x: 0, y: 0, z: 0 },
+        gps: { lat: 0, lon: 0, accuracy: 0, rawLat: null, rawLon: null }
+    };
 
-        function requestSensors() {
-            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-                DeviceMotionEvent.requestPermission().then(response => {
-                    if (response === 'granted') startSystem();
-                    else alert("Permiso de sensores denegado.");
-                }).catch(console.error);
-            } else {
-                startSystem();
-            }
-            document.getElementById('permission-btn').style.display = 'none';
-        }
+    let stepCount = 0;
+    let lastStepTime = 0;
+    let savedGPSPoints = []; 
+    let stepLogs = [];        
 
-        function startSystem() {
-            // 1. Acelerómetro y Giroscopio
-            window.addEventListener('devicemotion', (event) => {
-                let acc = event.accelerationIncludingGravity;
-                if (acc) {
-                    sensorData.accel.x = acc.x ? parseFloat(acc.x.toFixed(2)) : 0;
-                    sensorData.accel.y = acc.y ? parseFloat(acc.y.toFixed(2)) : 0;
-                    sensorData.accel.z = acc.z ? parseFloat(acc.z.toFixed(2)) : 0;
+    // Estados de control
+    let gpsActive = false;
+    let sensorsActive = false;
+    let watchId = null;
 
-                    let magnitude = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
-                    let now = Date.now();
-                    
-                    // Detección de paso (umbral y tiempo refractario de 350ms)
-                    if (magnitude > 11.5 && (now - lastStepTime) > 350) {
-                        stepCount++;
-                        lastStepTime = now;
-
-                        // Almacenar los datos de los sensores en este paso exacto
-                        let currentStepData = {
-                            step: stepCount,
-                            timestamp: new Date().toISOString(),
-                            accelX: sensorData.accel.x,
-                            accelY: sensorData.accel.y,
-                            accelZ: sensorData.accel.z,
-                            gyroX: sensorData.gyro.x,
-                            gyroY: sensorData.gyro.y,
-                            gyroZ: sensorData.gyro.z
-                        };
-                        
-                        stepLogs.push(currentStepData);
-                    }
+    function requestSensors() {
+        if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+            DeviceMotionEvent.requestPermission().then(response => {
+                if (response === 'granted') {
+                    alert("Permisos concedidos. Ahora puedes habilitar los sensores o el GPS de forma independiente.");
+                } else {
+                    alert("Permiso de sensores denegado.");
                 }
-
-                if (event.rotationRate) {
-                    sensorData.gyro.x = event.rotationRate.alpha ? parseFloat(event.rotationRate.alpha.toFixed(2)) : 0;
-                    sensorData.gyro.y = event.rotationRate.beta ? parseFloat(event.rotationRate.beta.toFixed(2)) : 0;
-                    sensorData.gyro.z = event.rotationRate.gamma ? parseFloat(event.rotationRate.gamma.toFixed(2)) : 0;
-                }
-            });
-
-            // 2. GPS en tiempo real
-            if (navigator.geolocation) {
-                navigator.geolocation.watchPosition(
-                    (position) => {
-                        sensorData.gps.rawLat = position.coords.latitude;
-                        sensorData.gps.rawLon = position.coords.longitude;
-                        sensorData.gps.lat = position.coords.latitude.toFixed(6);
-                        sensorData.gps.lon = position.coords.longitude.toFixed(6);
-                        sensorData.gps.accuracy = position.coords.accuracy.toFixed(1);
-                    },
-                    (error) => { console.error("GPS Error:", error.message); },
-                    { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
-                );
-            }
-
-            setInterval(refreshUI, 100);
+            }).catch(console.error);
+        } else {
+            alert("Permisos listos. Ahora puedes habilitar los sensores o el GPS de forma independiente.");
         }
+        document.getElementById('permission-btn').style.display = 'none';
+    }
 
-        // Guardar coordenada GPS (máximo 5000 registros)
-        function saveGPSPoint() {
-            if (sensorData.gps.rawLat === null) {
-                alert("Esperando señal GPS...");
-                return;
-            }
-            if (savedGPSPoints.length >= 5000) {
-                alert("Se ha alcanzado el límite máximo de 5000 registros GPS.");
-                return;
-            }
+    // Toggle para Antena GPS
+    function toggleGPSAntenna() {
+        gpsActive = !gpsActive;
+        let btn = document.getElementById('btn-toggle-gps');
+        let log = document.getElementById('gps-log');
 
-            let pointData = {
-                timestamp: new Date().toISOString(),
-                latitud: sensorData.gps.lat,
-                longitud: sensorData.gps.lon,
-                precision: sensorData.gps.accuracy
-            };
+        if (gpsActive) {
+            btn.innerText = "📡 Deshabilitar Antena GPS";
+            btn.classList.remove('btn-toggle-off');
+            btn.style.backgroundColor = "#dc2626"; // Color rojo para indicar apagado
+            log.innerHTML = "Buscando señal GPS...";
+            startGPS();
+        } else {
+            btn.innerText = "📡 Habilitar Antena GPS";
+            btn.classList.add('btn-toggle-off');
+            btn.style.backgroundColor = "";
+            if (watchId !== null && navigator.geolocation) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+            sensorData.gps.rawLat = null;
+            sensorData.gps.rawLon = null;
+            sensorData.gps.lat = "0.000000";
+            sensorData.gps.lon = "0.000000";
+            sensorData.gps.accuracy = "0.0";
+            log.innerHTML = "Antena GPS deshabilitada.";
+        }
+    }
+
+    function startGPS() {
+        if (navigator.geolocation) {
+            watchId = navigator.geolocation.watchPosition(
+                (position) => {
+                    if (!gpsActive) return;
+                    sensorData.gps.rawLat = position.coords.latitude;
+                    sensorData.gps.rawLon = position.coords.longitude;
+                    sensorData.gps.lat = position.coords.latitude.toFixed(6);
+                    sensorData.gps.lon = position.coords.longitude.toFixed(6);
+                    sensorData.gps.accuracy = position.coords.accuracy.toFixed(1);
+                },
+                (error) => { 
+                    if (gpsActive) console.error("GPS Error:", error.message); 
+                },
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+            );
+        } else {
+            alert("Geolocalización no soportada en este navegador.");
+        }
+    }
+
+    // Toggle para Sensores Inerciales
+    function toggleSensorsActive() {
+        sensorsActive = !sensorsActive;
+        let btn = document.getElementById('btn-toggle-sensors');
+        let log = document.getElementById('step-log');
+
+        if (sensorsActive) {
+            btn.innerText = "⚙️ Deshabilitar Sensores Inerciales";
+            btn.classList.remove('btn-toggle-off');
+            btn.style.backgroundColor = "#dc2626";
+            log.innerHTML = "Sensores activos. Mide pasos agitando el dispositivo.";
+        } else {
+            btn.innerText = "⚙️ Habilitar Sensores Inerciales";
+            btn.classList.add('btn-toggle-off');
+            btn.style.backgroundColor = "";
+            sensorData.accel = { x: 0, y: 0, z: 0 };
+            sensorData.gyro = { x: 0, y: 0, z: 0 };
+            log.innerHTML = "Sensores inerciales deshabilitados.";
+        }
+    }
+
+    // Listener global de devicemotion (condicionado por sensorsActive)
+    window.addEventListener('devicemotion', (event) => {
+        if (!sensorsActive) return;
+
+        let acc = event.accelerationIncludingGravity;
+        if (acc) {
+            sensorData.accel.x = acc.x ? parseFloat(acc.x.toFixed(2)) : 0;
+            sensorData.accel.y = acc.y ? parseFloat(acc.y.toFixed(2)) : 0;
+            sensorData.accel.z = acc.z ? parseFloat(acc.z.toFixed(2)) : 0;
+
+            let magnitude = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
+            let now = Date.now();
             
-            savedGPSPoints.push(pointData);
+            // Detección de paso (umbral y tiempo refractario de 350ms)
+            if (magnitude > 11.5 && (now - lastStepTime) > 350) {
+                stepCount++;
+                lastStepTime = now;
 
-            document.getElementById('gps-count').innerText = `${savedGPSPoints.length} / 5000`;
-            document.getElementById('gps-log').innerHTML = savedGPSPoints.slice(-50).reverse().map(p => 
-                `[${p.timestamp.split('T')[1].slice(0,8)}] Lat: ${p.latitud}, Lon: ${p.longitud} (${p.precision}m)`
+                let currentStepData = {
+                    step: stepCount,
+                    timestamp: new Date().toISOString(),
+                    accelX: sensorData.accel.x,
+                    accelY: sensorData.accel.y,
+                    accelZ: sensorData.accel.z,
+                    gyroX: sensorData.gyro.x,
+                    gyroY: sensorData.gyro.y,
+                    gyroZ: sensorData.gyro.z
+                };
+                
+                stepLogs.push(currentStepData);
+            }
+        }
+
+        if (event.rotationRate) {
+            sensorData.gyro.x = event.rotationRate.alpha ? parseFloat(event.rotationRate.alpha.toFixed(2)) : 0;
+            sensorData.gyro.y = event.rotationRate.beta ? parseFloat(event.rotationRate.beta.toFixed(2)) : 0;
+            sensorData.gyro.z = event.rotationRate.gamma ? parseFloat(event.rotationRate.gamma.toFixed(2)) : 0;
+        }
+    });
+
+    setInterval(refreshUI, 100);
+
+    // Guardar coordenada GPS (máximo 5000 registros)
+    function saveGPSPoint() {
+        if (!gpsActive) {
+            alert("La antena GPS está deshabilitada. Habilítala primero.");
+            return;
+        }
+        if (sensorData.gps.rawLat === null) {
+            alert("Esperando señal GPS válida...");
+            return;
+        }
+        if (savedGPSPoints.length >= 5000) {
+            alert("Se ha alcanzado el límite máximo de 5000 registros GPS.");
+            return;
+        }
+
+        let pointData = {
+            timestamp: new Date().toISOString(),
+            latitud: sensorData.gps.lat,
+            longitud: sensorData.gps.lon,
+            precision: sensorData.gps.accuracy
+        };
+        
+        savedGPSPoints.push(pointData);
+
+        document.getElementById('gps-count').innerText = `${savedGPSPoints.length} / 5000`;
+        document.getElementById('gps-log').innerHTML = savedGPSPoints.slice(-50).reverse().map(p => 
+            `[${p.timestamp.split('T')[1].slice(0,8)}] Lat: ${p.latitud}, Lon: ${p.longitud} (${p.precision}m)`
+        ).join('<br>');
+    }
+
+    // Función para restablecer / reiniciar prueba
+    function resetTest() {
+        if (confirm("¿Estás seguro de que deseas reiniciar la prueba? Se borrarán todos los registros de pasos y GPS almacenados.")) {
+            stepCount = 0;
+            lastStepTime = 0;
+            savedGPSPoints = [];
+            stepLogs = [];
+
+            // Restablecer interfaz visual
+            document.getElementById('gps-count').innerText = "0 / 5000";
+            document.getElementById('gps-log').innerHTML = gpsActive ? "Buscando señal GPS..." : "Antena GPS deshabilitada.";
+            document.getElementById('step-count').innerText = "0";
+            document.getElementById('step-log').innerHTML = sensorsActive ? "Sensores activos. Mide pasos agitando el dispositivo." : "Sensores inerciales deshabilitados.";
+        }
+    }
+
+    // Exportar GPS a CSV
+    function exportGPSCSV() {
+        if (savedGPSPoints.length === 0) {
+            alert("No hay registros GPS guardados para exportar.");
+            return;
+        }
+        let csvContent = "data:text/csv;charset=utf-8,Timestamp,Latitud,Longitud,Precision_m\r\n";
+        savedGPSPoints.forEach(row => {
+            csvContent += `${row.timestamp},${row.latitud},${row.longitud},${row.precision}\r\n`;
+        });
+        downloadFile(csvContent, "registros_gps.csv");
+    }
+
+    // Exportar Pasos y Sensores a CSV
+    function exportStepsCSV() {
+        if (stepLogs.length === 0) {
+            alert("No hay registros de pasos para exportar.");
+            return;
+        }
+        let csvContent = "data:text/csv;charset=utf-8,Paso,Timestamp,Accel_X,Accel_Y,Accel_Z,Gyro_X,Gyro_Y,Gyro_Z\r\n";
+        stepLogs.forEach(row => {
+            csvContent += `${row.step},${row.timestamp},${row.accelX},${row.accelY},${row.accelZ},${row.gyroX},${row.gyroY},${row.gyroZ}\r\n`;
+        });
+        downloadFile(csvContent, "registros_sensores_pasos.csv");
+    }
+
+    // Función auxiliar para descargar archivos
+    function downloadFile(content, fileName) {
+        let encodedUri = encodeURI(content);
+        let link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", fileName);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    function refreshUI() {
+        document.getElementById('gps-lat').innerText = sensorData.gps.lat;
+        document.getElementById('gps-lon').innerText = sensorData.gps.lon;
+        document.getElementById('gps-acc').innerText = sensorData.gps.accuracy;
+
+        document.getElementById('step-count').innerText = stepCount;
+        document.getElementById('live-acc').innerText = `${sensorData.accel.x}, ${sensorData.accel.y}, ${sensorData.accel.z}`;
+        document.getElementById('live-gyro').innerText = `${sensorData.gyro.x}, ${sensorData.gyro.y}, ${sensorData.gyro.z}`;
+
+        if (stepLogs.length > 0 && sensorsActive) {
+            let logHtml = stepLogs.slice(-30).reverse().map(s => 
+                `Paso #${s.step} -> Accel: [${s.accelX}, ${s.accelY}, ${s.accelZ}] | Gyro: [${s.gyroX}, ${s.gyroY}, ${s.gyroZ}]`
             ).join('<br>');
+            document.getElementById('step-log').innerHTML = logHtml;
         }
-
-        // Función para restablecer / reiniciar prueba
-        function resetTest() {
-            if (confirm("¿Estás seguro de que deseas reiniciar la prueba? Se borrarán todos los registros de pasos y GPS almacenados.")) {
-                stepCount = 0;
-                lastStepTime = 0;
-                savedGPSPoints = [];
-                stepLogs = [];
-
-                // Restablecer interfaz visual
-                document.getElementById('gps-count').innerText = "0 / 5000";
-                document.getElementById('gps-log').innerHTML = "Aún no hay coordenadas GPS guardadas.";
-                document.getElementById('step-count').innerText = "0";
-                document.getElementById('step-log').innerHTML = "Los datos de los sensores al dar un paso aparecerán aquí.";
-            }
-        }
-
-        // Exportar GPS a CSV
-        function exportGPSCSV() {
-            if (savedGPSPoints.length === 0) {
-                alert("No hay registros GPS guardados para exportar.");
-                return;
-            }
-            let csvContent = "data:text/csv;charset=utf-8,Timestamp,Latitud,Longitud,Precision_m\r\n";
-            savedGPSPoints.forEach(row => {
-                csvContent += `${row.timestamp},${row.latitud},${row.longitud},${row.precision}\r\n`;
-            });
-            downloadFile(csvContent, "registros_gps.csv");
-        }
-
-        // Exportar Pasos y Sensores a CSV
-        function exportStepsCSV() {
-            if (stepLogs.length === 0) {
-                alert("No hay registros de pasos para exportar.");
-                return;
-            }
-            let csvContent = "data:text/csv;charset=utf-8,Paso,Timestamp,Accel_X,Accel_Y,Accel_Z,Gyro_X,Gyro_Y,Gyro_Z\r\n";
-            stepLogs.forEach(row => {
-                csvContent += `${row.step},${row.timestamp},${row.accelX},${row.accelY},${row.accelZ},${row.gyroX},${row.gyroY},${row.gyroZ}\r\n`;
-            });
-            downloadFile(csvContent, "registros_sensores_pasos.csv");
-        }
-
-        // Función auxiliar para descargar archivos
-        function downloadFile(content, fileName) {
-            let encodedUri = encodeURI(content);
-            let link = document.createElement("a");
-            link.setAttribute("href", encodedUri);
-            link.setAttribute("download", fileName);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-
-        function refreshUI() {
-            document.getElementById('gps-lat').innerText = sensorData.gps.lat;
-            document.getElementById('gps-lon').innerText = sensorData.gps.lon;
-            document.getElementById('gps-acc').innerText = sensorData.gps.accuracy;
-
-            document.getElementById('step-count').innerText = stepCount;
-            document.getElementById('live-acc').innerText = `${sensorData.accel.x}, ${sensorData.accel.y}, ${sensorData.accel.z}`;
-            document.getElementById('live-gyro').innerText = `${sensorData.gyro.x}, ${sensorData.gyro.y}, ${sensorData.gyro.z}`;
-
-            if (stepLogs.length > 0) {
-                let logHtml = stepLogs.slice(-30).reverse().map(s => 
-                    `Paso #${s.step} -> Accel: [${s.accelX}, ${s.accelY}, ${s.accelZ}] | Gyro: [${s.gyroX}, ${s.gyroY}, ${s.gyroZ}]`
-                ).join('<br>');
-                document.getElementById('step-log').innerHTML = logHtml;
-            }
-        }
-    </script>
-</body>
-</html>
+    }
+</script>
