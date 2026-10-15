@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Navegador Inercial - Registro y Exportación</title>
+    <title>Navegador Inercial Avanzado - IMU + GPS + Magnetómetro + Barómetro</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -16,7 +16,7 @@
             align-items: center;
         }
         h1 {
-            font-size: 1.3rem;
+            font-size: 1.2rem;
             margin-bottom: 15px;
             text-align: center;
             color: #38bdf8;
@@ -77,10 +77,10 @@
             background-color: #047857;
         }
         .btn-toggle {
-            background-color: #d97706; /* Naranja cuando está apagado */
+            background-color: #d97706;
         }
         .btn-toggle.active {
-            background-color: #059669; /* Verde cuando está encendido */
+            background-color: #059669;
         }
         .btn-export {
             background-color: #0284c7;
@@ -100,7 +100,7 @@
             background-color: #0f172a;
             border-radius: 6px;
             padding: 8px;
-            max-height: 120px;
+            max-height: 110px;
             overflow-y: auto;
             margin-top: 8px;
             font-family: monospace;
@@ -110,11 +110,11 @@
 </head>
 <body>
 
-    <h1>Registro y Exportación de Sensores</h1>
+    <h1>Navegación Inercial & Sensores Ambientales</h1>
 
     <div class="dashboard">
         <!-- Botón General para Reiniciar Prueba -->
-        <button class="btn-action btn-reset" onclick="resetTest()" style="padding: 12px; font-size: 1rem; margin-bottom: 5px;">🔄 Reiniciar Prueba / Restablecer</button>
+        <button class="btn-action btn-reset" onclick="resetTest()" style="padding: 12px; font-size: 1rem; margin-bottom: 5px;">🔄 Reiniciar / Calibrar Sistema</button>
 
         <!-- 1. GPS -->
         <div class="card">
@@ -130,16 +130,18 @@
             <div id="gps-log" class="log-container">Aún no hay coordenadas GPS guardadas.</div>
         </div>
 
-        <!-- 2. Pasos & Sensores Inerciales -->
+        <!-- 2. Pasos, IMU, Magnetómetro & Barómetro -->
         <div class="card">
-            <h2>🚶‍♂️ Pasos & Sensores Inerciales</h2>
+            <h2>🚶‍♂️ IMU, Rumbo & Altitud</h2>
             <div class="data-row"><span class="label">Pasos Totales:</span> <span id="step-count" class="value highlight">0</span></div>
+            <div class="data-row"><span class="label">Rumbo (Yaw - Brújula):</span> <span id="live-yaw" class="value">0.0°</span></div>
+            <div class="data-row"><span class="label">Presión Barométrica:</span> <span id="live-pressure" class="value">No disponible</span></div>
             
-            <h3 style="font-size: 0.9rem; color: #38bdf8; margin: 12px 0 6px 0;">Valores instantáneos:</h3>
+            <h3 style="font-size: 0.9rem; color: #38bdf8; margin: 10px 0 4px 0;">Valores instantáneos:</h3>
             <div class="data-row"><span class="label">Acelerómetro (X,Y,Z):</span> <span id="live-acc" class="value">0, 0, 0</span></div>
             <div class="data-row"><span class="label">Giroscopio (X,Y,Z):</span> <span id="live-gyro" class="value">0, 0, 0</span></div>
             
-            <button id="sensors-toggle-btn" class="btn-action btn-toggle active" onclick="toggleSensors()">🔋 Desactivar Registro de Sensores</button>
+            <button id="sensors-toggle-btn" class="btn-action btn-toggle active" onclick="toggleSensors()">🔋 Desactivar Registro de Pasos</button>
             <button class="btn-action btn-export" onclick="exportStepsCSV()">📥 Exportar Pasos y Sensores a CSV</button>
             <div id="step-log" class="log-container">Los datos de los sensores al dar un paso aparecerán aquí.</div>
         </div>
@@ -149,6 +151,8 @@
         let sensorData = {
             accel: { x: 0, y: 0, z: 0 },
             gyro: { x: 0, y: 0, z: 0 },
+            yaw: 0,
+            pressure: null,
             gps: { lat: 0, lon: 0, accuracy: 0, rawLat: null, rawLon: null }
         };
 
@@ -159,29 +163,31 @@
 
         let gpsWatchId = null;
         let isGpsActive = true;
-        let isSensorsActive = true;
+        let isSensorsLoggingActive = true;
 
-        // Iniciar sistemas automáticamente al cargar la página
+        // Inicio del sistema según flujo de implementación
         window.addEventListener('load', () => {
             startGPS();
-            startSensors();
+            startSensorsAndIMU();
+            startBarometer();
         });
 
-        // Control de Sensores Inerciales
+        // 1. Control de Sensores Inerciales, Giroscopio, Acelerómetro y Magnetómetro (Orientación)
         function toggleSensors() {
-            isSensorsActive = !isSensorsActive;
+            isSensorsLoggingActive = !isSensorsLoggingActive;
             let btn = document.getElementById('sensors-toggle-btn');
 
-            if (isSensorsActive) {
-                btn.innerText = "🔋 Desactivar Registro de Sensores";
+            if (isSensorsLoggingActive) {
+                btn.innerText = "🔋 Desactivar Registro de Pasos";
                 btn.classList.add('active');
             } else {
-                btn.innerText = "🔋 Activar Registro de Sensores";
+                btn.innerText = "🔋 Activar Registro de Pasos";
                 btn.classList.remove('active');
             }
         }
 
-        function startSensors() {
+        function startSensorsAndIMU() {
+            // Lectura de IMU (Acelerómetro y Giroscopio)
             window.addEventListener('devicemotion', (event) => {
                 let acc = event.accelerationIncludingGravity;
                 if (acc) {
@@ -189,14 +195,15 @@
                     sensorData.accel.y = acc.y ? parseFloat(acc.y.toFixed(2)) : 0;
                     sensorData.accel.z = acc.z ? parseFloat(acc.z.toFixed(2)) : 0;
 
-                    if (isSensorsActive) {
-                        let magnitude = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
-                        let now = Date.now();
-                        
-                        if (magnitude > 11.5 && (now - lastStepTime) > 350) {
-                            stepCount++;
-                            lastStepTime = now;
+                    let magnitude = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
+                    let now = Date.now();
+                    
+                    // Detección de paso a pie
+                    if (magnitude > 11.5 && (now - lastStepTime) > 350) {
+                        stepCount++;
+                        lastStepTime = now;
 
+                        if (isSensorsLoggingActive) {
                             let currentStepData = {
                                 step: stepCount,
                                 timestamp: new Date().toISOString(),
@@ -205,9 +212,10 @@
                                 accelZ: sensorData.accel.z,
                                 gyroX: sensorData.gyro.x,
                                 gyroY: sensorData.gyro.y,
-                                gyroZ: sensorData.gyro.z
+                                gyroZ: sensorData.gyro.z,
+                                yaw: sensorData.yaw,
+                                pressure: sensorData.pressure
                             };
-                            
                             stepLogs.push(currentStepData);
                         }
                     }
@@ -219,9 +227,31 @@
                     sensorData.gyro.z = event.rotationRate.gamma ? parseFloat(event.rotationRate.gamma.toFixed(2)) : 0;
                 }
             });
+
+            // Lectura de Magnetómetro / Orientación (Rumbo absoluto con brújula)
+            window.addEventListener('deviceorientation', (event) => {
+                if (event.alpha !== null) {
+                    sensorData.yaw = parseFloat(event.alpha.toFixed(1)); // Rumbo magnético aproximado
+                }
+            });
         }
 
-        // Control de GPS
+        // 2. Integración de Barómetro (Si el dispositivo cuenta con la API de Sensor Barométrico)
+        function startBarometer() {
+            if ('Barometer' in window) {
+                try {
+                    const barometer = new Barometer({ frequency: 10 });
+                    barometer.addEventListener('reading', () => {
+                        sensorData.pressure = parseFloat(barometer.pressure.toFixed(2));
+                    });
+                    barometer.start();
+                } catch (error) {
+                    console.log("Barómetro no soportado o permisos denegados:", error);
+                }
+            }
+        }
+
+        // 3. Control de GPS
         function toggleGPS() {
             isGpsActive = !isGpsActive;
             let btn = document.getElementById('gps-toggle-btn');
@@ -256,7 +286,6 @@
             }
         }
 
-        // Guardar coordenada GPS manual (máximo 5000 registros)
         function saveGPSPoint() {
             if (sensorData.gps.rawLat === null) {
                 alert("Esperando señal GPS...");
@@ -275,16 +304,14 @@
             };
             
             savedGPSPoints.push(pointData);
-
             document.getElementById('gps-count').innerText = `${savedGPSPoints.length} / 5000`;
             document.getElementById('gps-log').innerHTML = savedGPSPoints.slice(-50).reverse().map(p => 
                 `[${p.timestamp.split('T')[1].slice(0,8)}] Lat: ${p.latitud}, Lon: ${p.longitud} (${p.precision}m)`
             ).join('<br>');
         }
 
-        // Función para restablecer / reiniciar prueba
         function resetTest() {
-            if (confirm("¿Estás seguro de que deseas reiniciar la prueba? Se borrarán todos los registros de pasos y GPS almacenados.")) {
+            if (confirm("¿Estás seguro de reiniciar? Se borrarán todos los registros acumulados.")) {
                 stepCount = 0;
                 lastStepTime = 0;
                 savedGPSPoints = [];
@@ -297,7 +324,6 @@
             }
         }
 
-        // Exportar GPS a CSV
         function exportGPSCSV() {
             if (savedGPSPoints.length === 0) {
                 alert("No hay registros GPS guardados para exportar.");
@@ -310,20 +336,18 @@
             downloadFile(csvContent, "registros_gps.csv");
         }
 
-        // Exportar Pasos y Sensores a CSV
         function exportStepsCSV() {
             if (stepLogs.length === 0) {
                 alert("No hay registros de pasos para exportar.");
                 return;
             }
-            let csvContent = "data:text/csv;charset=utf-8,Paso,Timestamp,Accel_X,Accel_Y,Accel_Z,Gyro_X,Gyro_Y,Gyro_Z\r\n";
+            let csvContent = "data:text/csv;charset=utf-8,Paso,Timestamp,Accel_X,Accel_Y,Accel_Z,Gyro_X,Gyro_Y,Gyro_Z,Yaw,Pressure_hPa\r\n";
             stepLogs.forEach(row => {
-                csvContent += `${row.step},${row.timestamp},${row.accelX},${row.accelY},${row.accelZ},${row.gyroX},${row.gyroY},${row.gyroZ}\r\n`;
+                csvContent += `${row.step},${row.timestamp},${row.accelX},${row.accelY},${row.accelZ},${row.gyroX},${row.gyroY},${row.gyroZ},${row.yaw},${row.pressure}\r\n`;
             });
             downloadFile(csvContent, "registros_sensores_pasos.csv");
         }
 
-        // Función auxiliar para descargar archivos
         function downloadFile(content, fileName) {
             let encodedUri = encodeURI(content);
             let link = document.createElement("a");
@@ -342,12 +366,15 @@
             document.getElementById('gps-acc').innerText = sensorData.gps.accuracy;
 
             document.getElementById('step-count').innerText = stepCount;
+            document.getElementById('live-yaw').innerText = `${sensorData.yaw}°`;
+            document.getElementById('live-pressure').innerText = sensorData.pressure !== null ? `${sensorData.pressure} hPa` : "No disponible";
+            
             document.getElementById('live-acc').innerText = `${sensorData.accel.x}, ${sensorData.accel.y}, ${sensorData.accel.z}`;
             document.getElementById('live-gyro').innerText = `${sensorData.gyro.x}, ${sensorData.gyro.y}, ${sensorData.gyro.z}`;
 
             if (stepLogs.length > 0) {
                 let logHtml = stepLogs.slice(-30).reverse().map(s => 
-                    `Paso #${s.step} -> Accel: [${s.accelX}, ${s.accelY}, ${s.accelZ}] | Gyro: [${s.gyroX}, ${s.gyroY}, ${s.gyroZ}]`
+                    `Paso #${s.step} -> Yaw: ${s.yaw}° | Accel: [${s.accelX}, ${s.accelY}, ${s.accelZ}]`
                 ).join('<br>');
                 document.getElementById('step-log').innerHTML = logHtml;
             }
