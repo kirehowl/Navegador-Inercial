@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Navegador Inercial - Registro, Exportación y Reinicio</title>
+    <title>Navegador Inercial - Registro y Exportación</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -17,26 +17,9 @@
         }
         h1 {
             font-size: 1.3rem;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
             text-align: center;
             color: #38bdf8;
-        }
-        #permission-btn {
-            background-color: #0284c7;
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            font-size: 1rem;
-            font-weight: bold;
-            border-radius: 8px;
-            cursor: pointer;
-            margin-bottom: 15px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-            width: 100%;
-            max-width: 450px;
-        }
-        #permission-btn:active {
-            background-color: #0369a1;
         }
         .dashboard {
             display: grid;
@@ -82,7 +65,7 @@
             background-color: #059669;
             color: white;
             border: none;
-            padding: 8px 12px;
+            padding: 9px 12px;
             font-size: 0.85rem;
             font-weight: bold;
             border-radius: 6px;
@@ -94,10 +77,10 @@
             background-color: #047857;
         }
         .btn-toggle {
-            background-color: #d97706;
+            background-color: #d97706; /* Naranja cuando está apagado */
         }
         .btn-toggle.active {
-            background-color: #059669;
+            background-color: #059669; /* Verde cuando está encendido */
         }
         .btn-export {
             background-color: #0284c7;
@@ -129,14 +112,11 @@
 
     <h1>Registro y Exportación de Sensores</h1>
 
-    <!-- Botón obligatorio para permisos en móviles -->
-    <button id="permission-btn" onclick="requestSensors()">Habilitar Permisos Iniciales</button>
-
     <div class="dashboard">
         <!-- Botón General para Reiniciar Prueba -->
         <button class="btn-action btn-reset" onclick="resetTest()" style="padding: 12px; font-size: 1rem; margin-bottom: 5px;">🔄 Reiniciar Prueba / Restablecer</button>
 
-        <!-- 1. GPS con límite de 5000 registros y exportación -->
+        <!-- 1. GPS -->
         <div class="card">
             <h2>📍 GPS (Máx. 5000 Registros)</h2>
             <div class="data-row"><span class="label">Latitud:</span> <span id="gps-lat" class="value">0.000000</span></div>
@@ -144,13 +124,13 @@
             <div class="data-row"><span class="label">Precisión GPS:</span> <span id="gps-acc" class="value">0.0</span> m</div>
             <div class="data-row"><span class="label">Registros Guardados:</span> <span id="gps-count" class="value">0 / 5000</span></div>
             
-            <button id="gps-toggle-btn" class="btn-action btn-toggle" onclick="toggleGPS()">🛰️ Activar Rastreo GPS</button>
+            <button id="gps-toggle-btn" class="btn-action btn-toggle active" onclick="toggleGPS()">🛰️ Desactivar Registro GPS</button>
             <button class="btn-action" onclick="saveGPSPoint()">💾 Guardar Coordenada GPS</button>
             <button class="btn-action btn-export" onclick="exportGPSCSV()">📥 Exportar GPS a CSV</button>
             <div id="gps-log" class="log-container">Aún no hay coordenadas GPS guardadas.</div>
         </div>
 
-        <!-- 2. Conteo de pasos, registro por paso de Sensores y exportación -->
+        <!-- 2. Pasos & Sensores Inerciales -->
         <div class="card">
             <h2>🚶‍♂️ Pasos & Sensores Inerciales</h2>
             <div class="data-row"><span class="label">Pasos Totales:</span> <span id="step-count" class="value highlight">0</span></div>
@@ -159,7 +139,7 @@
             <div class="data-row"><span class="label">Acelerómetro (X,Y,Z):</span> <span id="live-acc" class="value">0, 0, 0</span></div>
             <div class="data-row"><span class="label">Giroscopio (X,Y,Z):</span> <span id="live-gyro" class="value">0, 0, 0</span></div>
             
-            <button id="sensors-toggle-btn" class="btn-action btn-toggle" onclick="toggleSensors()">🔋 Activar Sensores Inerciales</button>
+            <button id="sensors-toggle-btn" class="btn-action btn-toggle active" onclick="toggleSensors()">🔋 Desactivar Registro de Sensores</button>
             <button class="btn-action btn-export" onclick="exportStepsCSV()">📥 Exportar Pasos y Sensores a CSV</button>
             <div id="step-log" class="log-container">Los datos de los sensores al dar un paso aparecerán aquí.</div>
         </div>
@@ -178,23 +158,14 @@
         let stepLogs = [];       
 
         let gpsWatchId = null;
-        let isGpsActive = false;
-        let isSensorsActive = false;
+        let isGpsActive = true;
+        let isSensorsActive = true;
 
-        function requestSensors() {
-            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-                DeviceMotionEvent.requestPermission().then(response => {
-                    if (response === 'granted') {
-                        alert("Permisos concedidos. Ya puedes activar los sensores y GPS mediante sus botones.");
-                    } else {
-                        alert("Permiso de sensores denegado.");
-                    }
-                }).catch(console.error);
-            } else {
-                alert("Permisos listos. Usa los botones individuales para encender/apagar sensores y GPS.");
-            }
-            document.getElementById('permission-btn').style.display = 'none';
-        }
+        // Iniciar sistemas automáticamente al cargar la página
+        window.addEventListener('load', () => {
+            startGPS();
+            startSensors();
+        });
 
         // Control de Sensores Inerciales
         function toggleSensors() {
@@ -202,50 +173,52 @@
             let btn = document.getElementById('sensors-toggle-btn');
 
             if (isSensorsActive) {
-                window.addEventListener('devicemotion', handleMotion);
-                btn.innerText = "🛑 Desactivar Sensores Inerciales";
+                btn.innerText = "🔋 Desactivar Registro de Sensores";
                 btn.classList.add('active');
             } else {
-                window.removeEventListener('devicemotion', handleMotion);
-                btn.innerText = "🔋 Activar Sensores Inerciales";
+                btn.innerText = "🔋 Activar Registro de Sensores";
                 btn.classList.remove('active');
             }
         }
 
-        function handleMotion(event) {
-            let acc = event.accelerationIncludingGravity;
-            if (acc) {
-                sensorData.accel.x = acc.x ? parseFloat(acc.x.toFixed(2)) : 0;
-                sensorData.accel.y = acc.y ? parseFloat(acc.y.toFixed(2)) : 0;
-                sensorData.accel.z = acc.z ? parseFloat(acc.z.toFixed(2)) : 0;
+        function startSensors() {
+            window.addEventListener('devicemotion', (event) => {
+                let acc = event.accelerationIncludingGravity;
+                if (acc) {
+                    sensorData.accel.x = acc.x ? parseFloat(acc.x.toFixed(2)) : 0;
+                    sensorData.accel.y = acc.y ? parseFloat(acc.y.toFixed(2)) : 0;
+                    sensorData.accel.z = acc.z ? parseFloat(acc.z.toFixed(2)) : 0;
 
-                let magnitude = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
-                let now = Date.now();
-                
-                if (magnitude > 11.5 && (now - lastStepTime) > 350) {
-                    stepCount++;
-                    lastStepTime = now;
+                    if (isSensorsActive) {
+                        let magnitude = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
+                        let now = Date.now();
+                        
+                        if (magnitude > 11.5 && (now - lastStepTime) > 350) {
+                            stepCount++;
+                            lastStepTime = now;
 
-                    let currentStepData = {
-                        step: stepCount,
-                        timestamp: new Date().toISOString(),
-                        accelX: sensorData.accel.x,
-                        accelY: sensorData.accel.y,
-                        accelZ: sensorData.accel.z,
-                        gyroX: sensorData.gyro.x,
-                        gyroY: sensorData.gyro.y,
-                        gyroZ: sensorData.gyro.z
-                    };
-                    
-                    stepLogs.push(currentStepData);
+                            let currentStepData = {
+                                step: stepCount,
+                                timestamp: new Date().toISOString(),
+                                accelX: sensorData.accel.x,
+                                accelY: sensorData.accel.y,
+                                accelZ: sensorData.accel.z,
+                                gyroX: sensorData.gyro.x,
+                                gyroY: sensorData.gyro.y,
+                                gyroZ: sensorData.gyro.z
+                            };
+                            
+                            stepLogs.push(currentStepData);
+                        }
+                    }
                 }
-            }
 
-            if (event.rotationRate) {
-                sensorData.gyro.x = event.rotationRate.alpha ? parseFloat(event.rotationRate.alpha.toFixed(2)) : 0;
-                sensorData.gyro.y = event.rotationRate.beta ? parseFloat(event.rotationRate.beta.toFixed(2)) : 0;
-                sensorData.gyro.z = event.rotationRate.gamma ? parseFloat(event.rotationRate.gamma.toFixed(2)) : 0;
-            }
+                if (event.rotationRate) {
+                    sensorData.gyro.x = event.rotationRate.alpha ? parseFloat(event.rotationRate.alpha.toFixed(2)) : 0;
+                    sensorData.gyro.y = event.rotationRate.beta ? parseFloat(event.rotationRate.beta.toFixed(2)) : 0;
+                    sensorData.gyro.z = event.rotationRate.gamma ? parseFloat(event.rotationRate.gamma.toFixed(2)) : 0;
+                }
+            });
         }
 
         // Control de GPS
@@ -254,38 +227,39 @@
             let btn = document.getElementById('gps-toggle-btn');
 
             if (isGpsActive) {
-                if (navigator.geolocation) {
-                    gpsWatchId = navigator.geolocation.watchPosition(
-                        (position) => {
-                            sensorData.gps.rawLat = position.coords.latitude;
-                            sensorData.gps.rawLon = position.coords.longitude;
-                            sensorData.gps.lat = position.coords.latitude.toFixed(6);
-                            sensorData.gps.lon = position.coords.longitude.toFixed(6);
-                            sensorData.gps.accuracy = position.coords.accuracy.toFixed(1);
-                        },
-                        (error) => { console.error("GPS Error:", error.message); },
-                        { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
-                    );
-                    btn.innerText = "🛑 Desactivar Rastreo GPS";
-                    btn.classList.add('active');
-                } else {
-                    alert("Geolocalización no soportada en este navegador.");
-                    isGpsActive = false;
-                }
+                startGPS();
+                btn.innerText = "🛰️ Desactivar Registro GPS";
+                btn.classList.add('active');
             } else {
                 if (gpsWatchId !== null) {
                     navigator.geolocation.clearWatch(gpsWatchId);
                     gpsWatchId = null;
                 }
-                btn.innerText = "🛰️ Activar Rastreo GPS";
+                btn.innerText = "🛰️ Activar Registro GPS";
                 btn.classList.remove('active');
             }
         }
 
-        // Guardar coordenada GPS (máximo 5000 registros)
+        function startGPS() {
+            if (navigator.geolocation) {
+                gpsWatchId = navigator.geolocation.watchPosition(
+                    (position) => {
+                        sensorData.gps.rawLat = position.coords.latitude;
+                        sensorData.gps.rawLon = position.coords.longitude;
+                        sensorData.gps.lat = position.coords.latitude.toFixed(6);
+                        sensorData.gps.lon = position.coords.longitude.toFixed(6);
+                        sensorData.gps.accuracy = position.coords.accuracy.toFixed(1);
+                    },
+                    (error) => { console.error("GPS Error:", error.message); },
+                    { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+                );
+            }
+        }
+
+        // Guardar coordenada GPS manual (máximo 5000 registros)
         function saveGPSPoint() {
             if (sensorData.gps.rawLat === null) {
-                alert("El GPS está inactivo o esperando señal...");
+                alert("Esperando señal GPS...");
                 return;
             }
             if (savedGPSPoints.length >= 5000) {
