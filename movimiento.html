@@ -144,9 +144,18 @@ main{max-width:760px;margin:auto;padding:20px 16px 40px}h1{font-size:1.55rem;lin
     lastT=t; count++;
   }
   function orientation(e){
-    // e.alpha es la brújula/rotación sobre el eje Z (0 a 360 grados)
     if (Number.isFinite(e.alpha)) {
-      currentAlpha = e.alpha * (Math.PI / 180); // Convertir a radianes
+      // Convertir a radianes el ángulo del dispositivo
+      let targetAlpha = e.alpha * (Math.PI / 180);
+      
+      // Filtro de suavizado (Lerp): un factor de 0.2 hace que sea muy receptivo a cambios pequeños
+      // Si notas que tiembla mucho, puedes subirlo a 0.1, pero para alta sensibilidad 0.2 es ideal.
+      let diff = targetAlpha - currentAlpha;
+      // Normalizar la diferencia para evitar saltos extraños en el círculo de 360 grados
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      
+      currentAlpha += diff * 0.2; 
     }
     $('ori').textContent=[e.alpha,e.beta,e.gamma].map(v=>fmt(v,1)).join(' / ');
   }
