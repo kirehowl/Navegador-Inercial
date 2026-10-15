@@ -1,236 +1,200 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Movimiento inercial del móvil con referencia GPS</title>
-<style>
-:root{color-scheme:dark;--bg:#10151d;--panel:#1a2330;--line:#344255;--accent:#65d6ad;--text:#eef4fa;--muted:#aab8c8;--warn:#ffd27a}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-main{max-width:760px;margin:auto;padding:20px 16px 40px}h1{font-size:1.55rem;line-height:1.2;margin:0 0 8px}p{color:var(--muted)}.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin:14px 0}
-.actions{display:flex;gap:10px;flex-wrap:wrap}button{border:0;border-radius:10px;padding:12px 16px;font-weight:700;font-size:1rem;cursor:pointer;background:var(--accent);color:#102019}button.secondary{background:#344255;color:var(--text)}button:disabled{opacity:.45;cursor:not-allowed}
-.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.metric{padding:12px;border:1px solid var(--line);border-radius:10px;min-width:0}.label{font-size:.83rem;color:var(--muted)}.value{font-size:1.2rem;font-weight:700;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
-.status{padding:10px 12px;border-radius:8px;background:#253346;color:var(--text)}.warning{border-left:4px solid var(--warn)}small{color:var(--muted)}canvas{width:100%;height:190px;background:#0d1219;border-radius:10px;display:block}ul{padding-left:22px;color:var(--muted)}code{color:#bcebd9}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Navegador Inercial - Panel de Sensores</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            margin: 0;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            font-size: 1.4rem;
+            margin-bottom: 10px;
+            text-align: center;
+            color: #38bdf8;
+        }
+        #permission-btn {
+            background-color: #0284c7;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 400px;
+        }
+        #permission-btn:active {
+            background-color: #0369a1;
+        }
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+            width: 100%;
+            max-width: 500px;
+        }
+        .card {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            border: 1px: #334155;
+        }
+        .card h2 {
+            font-size: 1.1rem;
+            margin-top: 0;
+            margin-bottom: 12px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            font-family: monospace;
+            font-size: 1rem;
+        }
+        .label {
+            color: #94a3b8;
+        }
+        .value {
+            color: #38bdf8;
+            font-weight: bold;
+        }
+    </style>
 </head>
 <body>
-<main>
-  <h1>Movimiento inercial con anclaje GPS</h1>
-  <p>Obtiene una posición GPS inicial de alta precisión y utiliza acelerómetro, giroscopio y rumbo sensible para la navegación estimada.</p>
-  
-  <div class="panel">
-    <div id="status" class="status">Detenido. Pulsa «Iniciar sensores» para capturar el GPS y activar el sistema.</div>
-    <div class="actions" style="margin-top:12px">
-      <button id="start">Iniciar sensores</button>
-      <button id="stop" class="secondary" disabled>Detener</button>
-      <button id="reset" class="secondary">Reiniciar estimación</button>
+
+    <h1>Panel de Navegación Inercial</h1>
+
+    <!-- Botón de activación (Requerido por iOS y Android modernos para leer sensores) -->
+    <button id="permission-btn" onclick="requestSensors()">Activar Sensores y GPS</button>
+
+    <div class="dashboard">
+        <!-- 1. GPS -->
+        <div class="card">
+            <h2>📍 Posicionamiento GPS</h2>
+            <div class="data-row"><span class="label">Latitud:</span> <span id="gps-lat" class="value">0.000000</span></div>
+            <div class="data-row"><span class="label">Longitud:</span> <span id="gps-lon" class="value">0.000000</span></div>
+            <div class="data-row"><span class="label">Altitud:</span> <span id="gps-alt" class="value">0.00</span> m</div>
+            <div class="data-row"><span class="label">Precisión GPS:</span> <span id="gps-acc" class="value">0.0</span> m</div>
+        </div>
+
+        <!-- 2. Acelerómetro (3 Ejes) -->
+        <div class="card">
+            <h2>📈 Acelerómetro (3 Ejes)</h2>
+            <div class="data-row"><span class="label">Eje X:</span> <span id="acc-x" class="value">0.00</span> m/s²</div>
+            <div class="data-row"><span class="label">Eje Y:</span> <span id="acc-y" class="value">0.00</span> m/s²</div>
+            <div class="data-row"><span class="label">Eje Z:</span> <span id="acc-z" class="value">0.00</span> m/s²</div>
+        </div>
+
+        <!-- 3. Giroscopio (3 Ejes) -->
+        <div class="card">
+            <h2>🔄 Giroscopio (3 Ejes)</h2>
+            <div class="data-row"><span class="label">Eje X (Alpha):</span> <span id="gyro-x" class="value">0.00</span> °/s</div>
+            <div class="data-row"><span class="label">Eje Y (Beta):</span> <span id="gyro-y" class="value">0.00</span> °/s</div>
+            <div class="data-row"><span class="label">Eje Z (Gamma):</span> <span id="gyro-z" class="value">0.00</span> °/s</div>
+        </div>
     </div>
-    
-    <div class="metric" style="margin-top:10px">
-      <div class="label">Referencia GPS Inicial (Anclaje)</div>
-      <div class="value" id="gpsStatus" style="font-size:1rem">Sin posición inicial</div>
-    </div>
-  </div>
 
-  <div class="panel">
-    <h2>Datos del sensor</h2>
-    <div class="grid">
-      <div class="metric"><div class="label">Aceleración X (m/s²)</div><div class="value" id="ax">—</div></div>
-      <div class="metric"><div class="label">Aceleración Y (m/s²)</div><div class="value" id="ay">—</div></div>
-      <div class="metric"><div class="label">Aceleración Z (m/s²)</div><div class="value" id="az">—</div></div>
-      <div class="metric"><div class="label">Rumbo actual (Rad/Filtro)</div><div class="value" id="ori">—</div></div>
-      <div class="metric"><div class="label">Frecuencia aproximada</div><div class="value" id="hz">—</div></div>
-    </div>
-  </div>
+    <script>
+        let sensorData = {
+            accel: { x: 0, y: 0, z: 0 },
+            gyro: { x: 0, y: 0, z: 0 },
+            gps: { lat: 0, lon: 0, alt: 0, accuracy: 0 }
+        };
 
-  <div class="panel">
-    <h2>Estimación de movimiento relativo (desde GPS)</h2>
-    <div class="grid">
-      <div class="metric"><div class="label">Desplazamiento X local (m)</div><div class="value" id="dx">0.000</div></div>
-      <div class="metric"><div class="label">Desplazamiento Y local (m)</div><div class="value" id="dy">0.000</div></div>
-      <div class="metric"><div class="label">Velocidad X estimada (m/s)</div><div class="value" id="vx">0.000</div></div>
-      <div class="metric"><div class="label">Velocidad Y estimada (m/s)</div><div class="value" id="vy">0.000</div></div>
-    </div>
-    <canvas id="plot" width="700" height="190" aria-label="Trayectoria relativa estimada"></canvas>
-  </div>
-</main>
+        function requestSensors() {
+            // 1. Solicitar permisos para dispositivos iOS (Safari 13+)
+            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+                DeviceMotionEvent.requestPermission()
+                    .then(response => {
+                        if (response === 'granted') {
+                            startListeners();
+                        } else {
+                            alert("Permiso de sensores denegado.");
+                        }
+                    })
+                    .catch(console.error);
+            } else {
+                // Android y otros navegadores estándar
+                startListeners();
+            }
 
-<script>
-(() => {
-  const $ = id => document.getElementById(id);
-  let running=false, lastT=null, count=0, lastHz=0, hzCount=0, hzStart=0, sensorTimeout=null, receivedMotion=false;
-  let vx=0, vy=0, dx=0, dy=0, points=[[0,0]];
-  let currentAlpha = 0; // Rumbo suavizado en radianes
-  let initialGPS = null; // Almacenará lat/lon de origen
-
-  const fmt=(v,n=3)=>Number.isFinite(v)?v.toFixed(n):'—';
-  function setStatus(s){$('status').textContent=s;}
-
-  // Obtener posición GPS inicial de alta precisión
-  function acquireGPS() {
-    return new Promise((resolve, reject) => {
-      if (!('geolocation' in navigator)) {
-        reject(new Error('Geolocalización no soportada en este navegador.'));
-        return;
-      }
-      $('gpsStatus').textContent = 'Buscando satélites / alta precisión GPS...';
-      navigator.geolocation.getCurrentPosition(
-        position => {
-          initialGPS = {
-            lat: position.coords.latitude,
-            lon: position.coords.longitude,
-            accuracy: position.coords.accuracy
-          };
-          $('gpsStatus').textContent = `Lat: ${initialGPS.lat.toFixed(6)}, Lon: ${initialGPS.lon.toFixed(6)} (Precisión: ±${Math.round(initialGPS.accuracy)}m)`;
-          resolve(initialGPS);
-        },
-        error => {
-          reject(new Error('Error de GPS: ' + error.message));
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-      );
-    });
-  }
-
-  function motion(e){
-    receivedMotion=true;
-    if(sensorTimeout){clearTimeout(sensorTimeout);sensorTimeout=null;}
-    const t=performance.now();
-    if(hzStart===0) hzStart=t;
-    hzCount++;
-    if(t-hzStart>=1000){lastHz=hzCount*1000/(t-hzStart);hzCount=0;hzStart=t;}
-    $('hz').textContent=fmt(lastHz,1)+' Hz';
-
-    const a=e.acceleration;
-    if(a && [a.x,a.y,a.z].some(v=>v!==null)){
-      $('ax').textContent=fmt(a.x); $('ay').textContent=fmt(a.y);$('az').textContent=fmt(a.z);
-      
-      if(lastT!==null){
-        const dt=(t-lastT)/1000;
-        if(dt>0 && dt<0.12){
-          const rawAx=Number.isFinite(a.x)?a.x:0;
-          const rawAy=Number.isFinite(a.y)?a.y:0;
-
-          // --- INTEGRACIÓN DE GIROSCOPIO PARA MÁXIMA SENSIBILIDAD EN GIROS ---
-          if (e.rotationRate && Number.isFinite(e.rotationRate.alpha)) {
-             const gyroZ = e.rotationRate.alpha * (Math.PI / 180);
-             currentAlpha += gyroZ * dt * 0.4; // Ajusta la ganancia del giroscopio
-          }
-
-          // Rotación de ejes basada en el rumbo actual
-          const cos = Math.cos(currentAlpha);
-          const sin = Math.sin(currentAlpha);
-          
-          let ax = rawAx * cos - rawAy * sin;
-          let ay = rawAx * sin + rawAy * cos;
-
-          // Zona muerta para filtrar microvibraciones y ruido estático
-          const threshold = 0.08;
-          if(Math.abs(ax) < threshold) ax = 0;
-          if(Math.abs(ay) < threshold) ay = 0;
-
-          // Integración con amortiguamiento
-          vx=(vx+ax*dt)*0.98; 
-          vy=(vy+ay*dt)*0.98;
-
-          // ZUPT simulado (frenado si la aceleración es cero y la velocidad es mínima)
-          if(ax === 0 && Math.abs(vx) < 0.05) vx = 0;
-          if(ay === 0 && Math.abs(vy) < 0.05) vy = 0;
-
-          dx+=vx*dt; 
-          dy+=vy*dt;
-
-          if(count%3===0){
-            points.push([dx,dy]);
-            if(points.length>500)points.shift();
-            draw();
-          }
-          $('vx').textContent=fmt(vx);$('vy').textContent=fmt(vy);
-          $('dx').textContent=fmt(dx);$('dy').textContent=fmt(dy);
+            // Ocultar botón tras hacer clic
+            document.getElementById('permission-btn').style.display = 'none';
         }
-      }
-    }
-    lastT=t; count++;
-  }
 
-  function orientation(e){
-    if (Number.isFinite(e.alpha)) {
-      let targetAlpha = e.alpha * (Math.PI / 180);
-      let diff = targetAlpha - currentAlpha;
-      while (diff < -Math.PI) diff += Math.PI * 2;
-      while (diff > Math.PI) diff -= Math.PI * 2;
-      currentAlpha += diff * 0.2; // Filtro suave muy receptivo a cambios
-    }
-    $('ori').textContent = fmt(currentAlpha * (180 / Math.PI), 1) + '°';
-  }
+        function startListeners() {
+            // Escuchar Acelerómetro y Giroscopio
+            window.addEventListener('devicemotion', (event) => {
+                if (event.acceleration) {
+                    sensorData.accel.x = event.acceleration.x ? event.acceleration.x.toFixed(2) : '0.00';
+                    sensorData.accel.y = event.acceleration.y ? event.acceleration.y.toFixed(2) : '0.00';
+                    sensorData.accel.z = event.acceleration.z ? event.acceleration.z.toFixed(2) : '0.00';
+                }
 
-  function draw(){
-    const c=$('plot'),ctx=c.getContext('2d'),w=c.width,h=c.height;
-    ctx.clearRect(0,0,w,h);ctx.strokeStyle='#344255';ctx.lineWidth=1;
-    ctx.beginPath();ctx.moveTo(w/2,8);ctx.lineTo(w/2,h-8);ctx.moveTo(8,h/2);ctx.lineTo(w-8,h/2);ctx.stroke();
-    if(points.length<2)return;
-    let max=1;for(const p of points)max=Math.max(max,Math.abs(p[0]),Math.abs(p[1]));
-    const scale=Math.min((w/2-18)/max,(h/2-18)/max);
-    ctx.strokeStyle='#65d6ad';ctx.lineWidth=2;ctx.beginPath();
-    points.forEach((p,i)=>{const x=w/2+p[0]*scale,y=h/2-p[1]*scale;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);});ctx.stroke();
-    ctx.fillStyle='#eef4fa';ctx.beginPath();ctx.arc(w/2+dx*scale,h/2-dy*scale,4,0,Math.PI*2);ctx.fill();
-  }
+                if (event.rotationRate) {
+                    sensorData.gyro.x = event.rotationRate.alpha ? event.rotationRate.alpha.toFixed(2) : '0.00';
+                    sensorData.gyro.y = event.rotationRate.beta ? event.rotationRate.beta.toFixed(2) : '0.00';
+                    sensorData.gyro.z = event.rotationRate.gamma ? event.rotationRate.gamma.toFixed(2) : '0.00';
+                }
+            });
 
-  async function start(){
-    if(!('DeviceMotionEvent' in window)){
-      setStatus('Este navegador no ofrece acceso a los sensores de movimiento.'); return;
-    }
-    try{
-      // 1. Solicitar permisos de sensores en móviles (iOS / Android modernos)
-      if(typeof DeviceMotionEvent.requestPermission==='function'){
-        const p1 = await DeviceMotionEvent.requestPermission();
-        if(p1!=='granted'){ setStatus('Permiso de movimiento denegado.'); return; }
-      }
-      if(typeof DeviceOrientationEvent!=='undefined' && typeof DeviceOrientationEvent.requestPermission==='function'){
-        await DeviceOrientationEvent.requestPermission();
-      }
+            // Escuchar GPS en tiempo real
+            if (navigator.geolocation) {
+                navigator.geolocation.watchPosition(
+                    (position) => {
+                        sensorData.gps.lat = position.coords.latitude.toFixed(6);
+                        sensorData.gps.lon = position.coords.longitude.toFixed(6);
+                        sensorData.gps.alt = position.coords.altitude !== null ? position.coords.altitude.toFixed(2) : 'N/A';
+                        sensorData.gps.accuracy = position.coords.accuracy.toFixed(1);
+                    },
+                    (error) => {
+                        console.error("Error GPS:", error.message);
+                    },
+                    { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+                );
+            } else {
+                alert("La geolocalización no está soportada en este navegador.");
+            }
 
-      // 2. Adquirir la posición GPS inicial de alta precisión como punto de referencia
-      setStatus('Obteniendo posición GPS inicial de alta precisión...');
-      await acquireGPS();
-
-      // 3. Activar los listeners de movimiento y orientación
-      receivedMotion=false;
-      window.addEventListener('devicemotion',motion);
-      window.addEventListener('deviceorientation',orientation);
-      running=true; $('start').disabled=true; $('stop').disabled=false;
-      setStatus('¡Sistema activo! Punto de partida GPS fijado. Comienza el movimiento inercial.');
-
-      sensorTimeout=setTimeout(()=>{
-        if(running && !receivedMotion){
-          setStatus('Sensores activos (GPS obtenido), pero no llegan datos de movimiento lineal del navegador.');
+            // Bucle optimizado para refrescar la interfaz visual sin saturar el navegador
+            setInterval(updateUI, 100);
         }
-      },3000);
 
-    }catch(err){
-      setStatus('Error al iniciar: ' + err.message);
-    }
-  }
+        function updateUI() {
+            // Actualizar GPS
+            document.getElementById('gps-lat').innerText = sensorData.gps.lat;
+            document.getElementById('gps-lon').innerText = sensorData.gps.lon;
+            document.getElementById('gps-alt').innerText = sensorData.gps.alt;
+            document.getElementById('gps-acc').innerText = sensorData.gps.accuracy;
 
-  function stop(){
-    window.removeEventListener('devicemotion',motion);
-    window.removeEventListener('deviceorientation',orientation);
-    running=false; lastT=null;
-    if(sensorTimeout){clearTimeout(sensorTimeout);sensorTimeout=null;}
-    $('start').disabled=false; $('stop').disabled=true;
-    setStatus('Sensores detenidos.');
-  }
+            // Actualizar Acelerómetro
+            document.getElementById('acc-x').innerText = sensorData.accel.x;
+            document.getElementById('acc-y').innerText = sensorData.accel.y;
+            document.getElementById('acc-z').innerText = sensorData.accel.z;
 
-  function reset(){
-    vx=vy=dx=dy=0; lastT=null; count=0; points=[[0,0]];
-    ['dx','dy','vx','vy'].forEach(id=>$(id).textContent='0.000');
-    draw();
-  }
-
-  $('start').addEventListener('click',start);
-  $('stop').addEventListener('click',stop);$('reset').addEventListener('click',reset);
-  draw();
-})();
-</script>
+            // Actualizar Giroscopio
+            document.getElementById('gyro-x').innerText = sensorData.gyro.x;
+            document.getElementById('gyro-y').innerText = sensorData.gyro.y;
+            document.getElementById('gyro-z').innerText = sensorData.gyro.z;
+        }
+    </script>
 </body>
 </html>
