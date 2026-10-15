@@ -76,6 +76,7 @@ main{max-width:760px;margin:auto;padding:20px 16px 40px}h1{font-size:1.55rem;lin
   const $ = id => document.getElementById(id);
   let running=false, lastT=null, count=0, lastHz=0, hzCount=0, hzStart=0, sensorTimeout=null, receivedMotion=false;
   let vx=0, vy=0, dx=0, dy=0, points=[[0,0]], hasLinear=false;
+  let currentAlpha = 0; // Rumbo aproximado en radianes
   const fmt=(v,n=3)=>Number.isFinite(v)?v.toFixed(n):'—';
   function setStatus(s){$('status').textContent=s;}
   function motion(e){
@@ -99,15 +100,23 @@ main{max-width:760px;margin:auto;padding:20px 16px 40px}h1{font-size:1.55rem;lin
         if(lastT!==null){
           const dt=(t-lastT)/1000;
           if(dt>0 && dt<0.12){
-            // --- INICIO DE LA MODIFICACIÓN ---
-            let ax=Number.isFinite(a.x)?a.x:0, ay=Number.isFinite(a.y)?a.y:0;
+            const rawAx=Number.isFinite(a.x)?a.x:0;
+            const rawAy=Number.isFinite(a.y)?a.y:0;
             
+            // --- ROTACIÓN DE EJES SEGÚN EL RUMBO (ORIENTATION ALPHA) ---
+            const cos = Math.cos(currentAlpha);
+            const sin = Math.sin(currentAlpha);
+            
+            let ax = rawAx * cos - rawAy * sin;
+            let ay = rawAx * sin + rawAy * cos;
+            // ----------------------------------------------------------
+
             // Zona muerta: ignora microvibraciones o ruido menor a 0.08 m/s²
             const threshold = 0.08;
             if(Math.abs(ax) < threshold) ax = 0;
             if(Math.abs(ay) < threshold) ay = 0;
 
-            // Integración con factor de amortiguamiento más fuerte (0.98)
+            // Integración con factor de amortiguamiento
             vx=(vx+ax*dt)*0.98; 
             vy=(vy+ay*dt)*0.98;
 
@@ -117,7 +126,6 @@ main{max-width:760px;margin:auto;padding:20px 16px 40px}h1{font-size:1.55rem;lin
 
             dx+=vx*dt; 
             dy+=vy*dt;
-            // --- FIN DE LA MODIFICACIÓN ---
 
             if(count%3===0){points.push([dx,dy]);if(points.length>500)points.shift();draw();}
             $('vx').textContent=fmt(vx); $('vy').textContent=fmt(vy);
@@ -136,6 +144,10 @@ main{max-width:760px;margin:auto;padding:20px 16px 40px}h1{font-size:1.55rem;lin
     lastT=t; count++;
   }
   function orientation(e){
+    // e.alpha es la brújula/rotación sobre el eje Z (0 a 360 grados)
+    if (Number.isFinite(e.alpha)) {
+      currentAlpha = e.alpha * (Math.PI / 180); // Convertir a radianes
+    }
     $('ori').textContent=[e.alpha,e.beta,e.gamma].map(v=>fmt(v,1)).join(' / ');
   }
   function draw(){
