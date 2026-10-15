@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Navegador Inercial - Traza y Pasos</title>
+    <title>Navegador Inercial - PDR & GPS</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -85,6 +85,29 @@
             display: block;
             margin: 0 auto;
         }
+        .btn-action {
+            background-color: #059669;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 8px;
+        }
+        .btn-action:active {
+            background-color: #047857;
+        }
+        #saved-list {
+            font-size: 0.8rem;
+            color: #cbd5e1;
+            max-height: 80px;
+            overflow-y: auto;
+            margin-top: 8px;
+            font-family: monospace;
+        }
     </style>
 </head>
 <body>
@@ -92,12 +115,12 @@
     <h1>Navegador Inercial & PDR</h1>
 
     <!-- Botón obligatorio para permisos de sensores en móviles -->
-    <button id="permission-btn" onclick="requestSensors()">Activar Sensores, GPS y PDR</button>
+    <button id="permission-btn" onclick="requestSensors()">Activar Sensores y GPS</button>
 
     <div class="dashboard">
         <!-- 0. Resumen de Conteo y Posición Relativa -->
         <div class="card">
-            <h2>🚶‍♂️ Estimación de Movimiento</h2>
+            <h2>🚶‍♂️ Estimación de Movimiento (PDR)</h2>
             <div class="data-row"><span class="label">Pasos Totales:</span> <span id="step-count" class="value highlight">0</span></div>
             <div class="data-row"><span class="label">Posición X (relativa):</span> <span id="pos-x" class="value">0.00</span> m</div>
             <div class="data-row"><span class="label">Posición Y (relativa):</span> <span id="pos-y" class="value">0.00</span> m</div>
@@ -110,12 +133,14 @@
             <p style="font-size: 0.75rem; color: #64748b; margin: 5px 0 0 0;">El punto central (0,0) es el inicio.</p>
         </div>
 
-        <!-- 1. GPS -->
+        <!-- 1. GPS con Botón de Guardado -->
         <div class="card">
             <h2>📍 GPS (Posicionamiento Absoluto)</h2>
             <div class="data-row"><span class="label">Latitud:</span> <span id="gps-lat" class="value">0.000000</span></div>
             <div class="data-row"><span class="label">Longitud:</span> <span id="gps-lon" class="value">0.000000</span></div>
             <div class="data-row"><span class="label">Precisión GPS:</span> <span id="gps-acc" class="value">0.0</span> m</div>
+            <button class="btn-action" onclick="saveGPSPoint()">💾 Guardar Coordenada GPS</button>
+            <div id="saved-list">Sin puntos guardados.</div>
         </div>
 
         <!-- 2. Acelerómetro (3 Ejes) -->
@@ -126,44 +151,36 @@
             <div class="data-row"><span class="label">Eje Z:</span> <span id="acc-z" class="value">0.00</span> m/s²</div>
         </div>
 
-        <!-- 3. Giroscopio (3 Ejes) -->
+        <!-- 3. Giroscopio / Orientación -->
         <div class="card">
-            <h2>🔄 Giroscopio (3 Ejes)</h2>
-            <div class="data-row"><span class="label">Eje X (Alpha):</span> <span id="gyro-x" class="value">0.00</span> °/s</div>
-            <div class="data-row"><span class="label">Eje Y (Beta):</span> <span id="gyro-y" class="value">0.00</span> °/s</div>
-            <div class="data-row"><span class="label">Eje Z (Gamma):</span> <span id="gyro-z" class="value">0.00</span> °/s</div>
+            <h2>🔄 Orientación (Rumbo)</h2>
+            <div class="data-row"><span class="label">Rumbo (Alpha):</span> <span id="orientation-alpha" class="value">0.00</span> °</div>
         </div>
     </div>
 
     <script>
-        // Variables globales de estado y sensores
         let sensorData = {
             accel: { x: 0, y: 0, z: 0 },
-            gyro: { x: 0, y: 0, z: 0 },
-            gps: { lat: 0, lon: 0, accuracy: 0 }
+            orientation: 0,
+            gps: { lat: 0, lon: 0, accuracy: 0, rawLat: null, rawLon: null }
         };
 
         let stepCount = 0;
         let lastStepTime = 0;
-        let heading = 0;                    // Rumbo acumulado en radianes
-        let currentPos = { x: 0, y: 0 };    // Posición en metros (X, Y)
-        let trackPoints = [{ x: 0, y: 0 }]; // Historial de la trayectoria
+        let currentPos = { x: 0, y: 0 };    
+        let trackPoints = [{ x: 0, y: 0 }]; 
+        let savedGPSPoints = [];
 
-        // Configuración del Canvas
         const canvas = document.getElementById('trackCanvas');
         const ctx = canvas.getContext('2d');
 
         function requestSensors() {
+            // Permisos para iOS
             if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-                DeviceMotionEvent.requestPermission()
-                    .then(response => {
-                        if (response === 'granted') {
-                            startSystem();
-                        } else {
-                            alert("Permiso de sensores denegado.");
-                        }
-                    })
-                    .catch(console.error);
+                DeviceMotionEvent.requestPermission().then(response => {
+                    if (response === 'granted') startSystem();
+                    else alert("Permiso de sensores denegado.");
+                }).catch(console.error);
             } else {
                 startSystem();
             }
@@ -171,7 +188,7 @@
         }
 
         function startSystem() {
-            // 1. Captura de Acelerómetro y Giroscopio
+            // 1. Acelerómetro para conteo de pasos
             window.addEventListener('devicemotion', (event) => {
                 let acc = event.accelerationIncludingGravity;
                 if (acc) {
@@ -179,40 +196,39 @@
                     sensorData.accel.y = acc.y ? acc.y.toFixed(2) : '0.00';
                     sensorData.accel.z = acc.z ? acc.z.toFixed(2) : '0.00';
 
-                    // Magnitud total para detección de pasos
                     let magnitude = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
                     let now = Date.now();
                     
-                    // Umbral de paso y filtro de tiempo mínimo (350ms)
-                    if (magnitude > 11.8 && (now - lastStepTime) > 350) {
+                    // Detección de paso con umbral y filtro de tiempo (350ms)
+                    if (magnitude > 11.5 && (now - lastStepTime) > 350) {
                         stepCount++;
                         lastStepTime = now;
                         
-                        // Avanzar una zancada (aprox 0.7 metros) orientada por el rumbo actual
-                        let stepLength = 0.7;
-                        currentPos.x += stepLength * Math.sin(heading);
-                        currentPos.y += stepLength * Math.cos(heading);
+                        // Usar el rumbo actual para calcular la nueva ubicación relativa
+                        let stepLength = 0.7; // metros por paso
+                        let rad = sensorData.orientation * (Math.PI / 180);
+                        
+                        currentPos.x += stepLength * Math.sin(rad);
+                        currentPos.y += stepLength * Math.cos(rad);
 
-                        // Registrar punto en la trayectoria
                         trackPoints.push({ x: currentPos.x, y: currentPos.y });
                     }
                 }
+            });
 
-                if (event.rotationRate) {
-                    let rotZ = event.rotationRate.gamma || 0; // Rotación sobre el plano horizontal
-                    sensorData.gyro.x = event.rotationRate.alpha ? event.rotationRate.alpha.toFixed(2) : '0.00';
-                    sensorData.gyro.y = event.rotationRate.beta ? event.rotationRate.beta.toFixed(2) : '0.00';
-                    sensorData.gyro.z = rotZ.toFixed(2);
-
-                    // Integrar velocidad angular para actualizar el rumbo (convertido a radianes)
-                    heading += (rotZ * Math.PI / 180) * 0.05; 
+            // 2. Orientación absoluta del dispositivo (Rumbo limpio sin la deriva del giroscopio)
+            window.addEventListener('deviceorientation', (event) => {
+                if (event.alpha !== null) {
+                    sensorData.orientation = event.alpha; // Ángulo de brújula/rumbo
                 }
             });
 
-            // 2. Captura de GPS
+            // 3. GPS en tiempo real
             if (navigator.geolocation) {
                 navigator.geolocation.watchPosition(
                     (position) => {
+                        sensorData.gps.rawLat = position.coords.latitude;
+                        sensorData.gps.rawLon = position.coords.longitude;
                         sensorData.gps.lat = position.coords.latitude.toFixed(6);
                         sensorData.gps.lon = position.coords.longitude.toFixed(6);
                         sensorData.gps.accuracy = position.coords.accuracy.toFixed(1);
@@ -222,12 +238,22 @@
                 );
             }
 
-            // Bucle de actualización visual cada 100ms
             setInterval(refreshUI, 100);
         }
 
+        function saveGPSPoint() {
+            if (sensorData.gps.rawLat === null) {
+                alert("Esperando señal GPS...");
+                return;
+            }
+            let pointStr = `Lat: ${sensorData.gps.lat}, Lon: ${sensorData.gps.lon}`;
+            savedGPSPoints.push(pointStr);
+
+            let listContainer = document.getElementById('saved-list');
+            listContainer.innerHTML = savedGPSPoints.map((p, i) => `[${i+1}] ${p}`).join('<br>');
+        }
+
         function refreshUI() {
-            // Actualizar etiquetas de texto
             document.getElementById('step-count').innerText = stepCount;
             document.getElementById('pos-x').innerText = currentPos.x.toFixed(2);
             document.getElementById('pos-y').innerText = currentPos.y.toFixed(2);
@@ -240,11 +266,8 @@
             document.getElementById('acc-y').innerText = sensorData.accel.y;
             document.getElementById('acc-z').innerText = sensorData.accel.z;
 
-            document.getElementById('gyro-x').innerText = sensorData.gyro.x;
-            document.getElementById('gyro-y').innerText = sensorData.gyro.y;
-            document.getElementById('gyro-z').innerText = sensorData.gyro.z;
+            document.getElementById('orientation-alpha').innerText = sensorData.orientation.toFixed(1);
 
-            // Dibujar el mapa de trayectoria en el Canvas
             drawTrack();
         }
 
@@ -253,9 +276,9 @@
 
             let centerX = canvas.width / 2;
             let centerY = canvas.height / 2;
-            let scale = 15; // Escala: píxeles por metro
+            let scale = 12; // Escala ajustada de píxeles por metro
 
-            // Dibujar ejes de referencia
+            // Dibujar ejes cruzados de referencia
             ctx.strokeStyle = '#1e293b';
             ctx.lineWidth = 1;
             ctx.beginPath();
@@ -265,25 +288,21 @@
 
             if (trackPoints.length === 0) return;
 
-            // Dibujar la línea de la trayectoria
+            // Dibujar línea de trayectoria
             ctx.strokeStyle = '#38bdf8';
             ctx.lineWidth = 3;
             ctx.beginPath();
             
             trackPoints.forEach((pt, index) => {
-                // Invertimos Y para que coincida con coordenadas cartesianas en pantalla
                 let screenX = centerX + (pt.x * scale);
                 let screenY = centerY - (pt.y * scale);
 
-                if (index === 0) {
-                    ctx.moveTo(screenX, screenY);
-                } else {
-                    ctx.lineTo(screenX, screenY);
-                }
+                if (index === 0) ctx.moveTo(screenX, screenY);
+                else ctx.lineTo(screenX, screenY);
             });
             ctx.stroke();
 
-            // Dibujar el punto actual del dispositivo
+            // Dibujar el punto actual (posición del dispositivo)
             let lastPt = trackPoints[trackPoints.length - 1];
             let currentScreenX = centerX + (lastPt.x * scale);
             let currentScreenY = centerY - (lastPt.y * scale);
