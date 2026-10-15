@@ -92,16 +92,33 @@ main{max-width:760px;margin:auto;padding:20px 16px 40px}h1{font-size:1.55rem;lin
       $('ax').textContent=fmt(displayA.x); $('ay').textContent=fmt(displayA.y); $('az').textContent=fmt(displayA.z);
       $('diag').textContent='Evento de movimiento recibido';
       $('diagDetail').textContent=(a && [a.x,a.y,a.z].some(v=>v!==null))
-        ? 'El navegador proporciona aceleración sin gravedad; se puede calcular una estimación experimental[span_13](start_span)[span_13](end_span).'
-        : 'Solo hay aceleración con gravedad. Se muestran las lecturas, pero no se integran para evitar una trayectoria falsa[span_14](start_span)[span_14](end_span).';
+        ? 'El navegador proporciona aceleración sin gravedad; se puede calcular una estimación experimental.'
+        : 'Solo hay aceleración con gravedad. Se muestran las lecturas, pero no se integran para evitar una trayectoria falsa.';
       if(a && [a.x,a.y,a.z].some(v=>v!==null)){
         hasLinear=true;
         if(lastT!==null){
           const dt=(t-lastT)/1000;
           if(dt>0 && dt<0.12){
-            const ax=Number.isFinite(a.x)?a.x:0, ay=Number.isFinite(a.y)?a.y:0;
-            vx=(vx+ax*dt)*0.995; vy=(vy+ay*dt)*0.995;
-            dx+=vx*dt; dy+=vy*dt;
+            // --- INICIO DE LA MODIFICACIÓN ---
+            let ax=Number.isFinite(a.x)?a.x:0, ay=Number.isFinite(a.y)?a.y:0;
+            
+            // Zona muerta: ignora microvibraciones o ruido menor a 0.08 m/s²
+            const threshold = 0.08;
+            if(Math.abs(ax) < threshold) ax = 0;
+            if(Math.abs(ay) < threshold) ay = 0;
+
+            // Integración con factor de amortiguamiento más fuerte (0.98)
+            vx=(vx+ax*dt)*0.98; 
+            vy=(vy+ay*dt)*0.98;
+
+            // ZUPT simulado: si la aceleración es 0 y la velocidad es baja, frena por completo
+            if(ax === 0 && Math.abs(vx) < 0.05) vx = 0;
+            if(ay === 0 && Math.abs(vy) < 0.05) vy = 0;
+
+            dx+=vx*dt; 
+            dy+=vy*dt;
+            // --- FIN DE LA MODIFICACIÓN ---
+
             if(count%3===0){points.push([dx,dy]);if(points.length>500)points.shift();draw();}
             $('vx').textContent=fmt(vx); $('vy').textContent=fmt(vy);
             $('dx').textContent=fmt(dx); $('dy').textContent=fmt(dy);
@@ -111,7 +128,7 @@ main{max-width:760px;margin:auto;padding:20px 16px 40px}h1{font-size:1.55rem;lin
     } else {
       $('ax').textContent='No disponible';$('ay').textContent='No disponible';$('az').textContent='No disponible';
       $('diag').textContent='Evento recibido, sin valores de aceleración';
-      $('diagDetail').textContent='El navegador dispara el evento, pero no expone valores de aceleración[span_15](start_span)[span_15](end_span).';
+      $('diagDetail').textContent='El navegador dispara el evento, pero no expone valores de aceleración.';
     }
     const r=e.rotationRate;
     if(r){$('ra').textContent=fmt(r.alpha);$('rb').textContent=fmt(r.beta);$('rg').textContent=fmt(r.gamma);}
