@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Navegador Inercial - Panel de Sensores</title>
+    <title>Navegador Inercial - Traza y Pasos</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -16,7 +16,7 @@
             align-items: center;
         }
         h1 {
-            font-size: 1.4rem;
+            font-size: 1.3rem;
             margin-bottom: 10px;
             text-align: center;
             color: #38bdf8;
@@ -30,10 +30,10 @@
             font-weight: bold;
             border-radius: 8px;
             cursor: pointer;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
             width: 100%;
-            max-width: 400px;
+            max-width: 450px;
         }
         #permission-btn:active {
             background-color: #0369a1;
@@ -41,33 +41,31 @@
         .dashboard {
             display: grid;
             grid-template-columns: 1fr;
-            gap: 15px;
+            gap: 12px;
             width: 100%;
-            max-width: 500px;
+            max-width: 450px;
         }
         .card {
             background-color: #1e293b;
             border-radius: 12px;
-            padding: 15px;
+            padding: 12px 15px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-            border: 1px: #334155;
+            border: 1px solid #334155;
         }
         .card h2 {
-            font-size: 1.1rem;
+            font-size: 1rem;
             margin-top: 0;
-            margin-bottom: 12px;
+            margin-bottom: 10px;
             border-bottom: 1px solid #334155;
-            padding-bottom: 6px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
+            padding-bottom: 5px;
+            color: #7dd3fc;
         }
         .data-row {
             display: flex;
             justify-content: space-between;
-            margin: 8px 0;
+            margin: 6px 0;
             font-family: monospace;
-            font-size: 1rem;
+            font-size: 0.95rem;
         }
         .label {
             color: #94a3b8;
@@ -76,22 +74,47 @@
             color: #38bdf8;
             font-weight: bold;
         }
+        .highlight {
+            color: #4ade80;
+            font-size: 1.1rem;
+        }
+        canvas {
+            background-color: #090d16;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            display: block;
+            margin: 0 auto;
+        }
     </style>
 </head>
 <body>
 
-    <h1>Panel de Navegación Inercial</h1>
+    <h1>Navegador Inercial & PDR</h1>
 
-    <!-- Botón de activación (Requerido por iOS y Android modernos para leer sensores) -->
-    <button id="permission-btn" onclick="requestSensors()">Activar Sensores y GPS</button>
+    <!-- Botón obligatorio para permisos de sensores en móviles -->
+    <button id="permission-btn" onclick="requestSensors()">Activar Sensores, GPS y PDR</button>
 
     <div class="dashboard">
+        <!-- 0. Resumen de Conteo y Posición Relativa -->
+        <div class="card">
+            <h2>🚶‍♂️ Estimación de Movimiento</h2>
+            <div class="data-row"><span class="label">Pasos Totales:</span> <span id="step-count" class="value highlight">0</span></div>
+            <div class="data-row"><span class="label">Posición X (relativa):</span> <span id="pos-x" class="value">0.00</span> m</div>
+            <div class="data-row"><span class="label">Posición Y (relativa):</span> <span id="pos-y" class="value">0.00</span> m</div>
+        </div>
+
+        <!-- Canvas para pintar la trayectoria en vivo -->
+        <div class="card" style="text-align: center;">
+            <h2>🗺️ Trayectoria en Tiempo Real</h2>
+            <canvas id="trackCanvas" width="380" height="250"></canvas>
+            <p style="font-size: 0.75rem; color: #64748b; margin: 5px 0 0 0;">El punto central (0,0) es el inicio.</p>
+        </div>
+
         <!-- 1. GPS -->
         <div class="card">
-            <h2>📍 Posicionamiento GPS</h2>
+            <h2>📍 GPS (Posicionamiento Absoluto)</h2>
             <div class="data-row"><span class="label">Latitud:</span> <span id="gps-lat" class="value">0.000000</span></div>
             <div class="data-row"><span class="label">Longitud:</span> <span id="gps-lon" class="value">0.000000</span></div>
-            <div class="data-row"><span class="label">Altitud:</span> <span id="gps-alt" class="value">0.00</span> m</div>
             <div class="data-row"><span class="label">Precisión GPS:</span> <span id="gps-acc" class="value">0.0</span> m</div>
         </div>
 
@@ -113,87 +136,162 @@
     </div>
 
     <script>
+        // Variables globales de estado y sensores
         let sensorData = {
             accel: { x: 0, y: 0, z: 0 },
             gyro: { x: 0, y: 0, z: 0 },
-            gps: { lat: 0, lon: 0, alt: 0, accuracy: 0 }
+            gps: { lat: 0, lon: 0, accuracy: 0 }
         };
 
+        let stepCount = 0;
+        let lastStepTime = 0;
+        let heading = 0;                    // Rumbo acumulado en radianes
+        let currentPos = { x: 0, y: 0 };    // Posición en metros (X, Y)
+        let trackPoints = [{ x: 0, y: 0 }]; // Historial de la trayectoria
+
+        // Configuración del Canvas
+        const canvas = document.getElementById('trackCanvas');
+        const ctx = canvas.getContext('2d');
+
         function requestSensors() {
-            // 1. Solicitar permisos para dispositivos iOS (Safari 13+)
             if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
                 DeviceMotionEvent.requestPermission()
                     .then(response => {
                         if (response === 'granted') {
-                            startListeners();
+                            startSystem();
                         } else {
                             alert("Permiso de sensores denegado.");
                         }
                     })
                     .catch(console.error);
             } else {
-                // Android y otros navegadores estándar
-                startListeners();
+                startSystem();
             }
-
-            // Ocultar botón tras hacer clic
             document.getElementById('permission-btn').style.display = 'none';
         }
 
-        function startListeners() {
-            // Escuchar Acelerómetro y Giroscopio
+        function startSystem() {
+            // 1. Captura de Acelerómetro y Giroscopio
             window.addEventListener('devicemotion', (event) => {
-                if (event.acceleration) {
-                    sensorData.accel.x = event.acceleration.x ? event.acceleration.x.toFixed(2) : '0.00';
-                    sensorData.accel.y = event.acceleration.y ? event.acceleration.y.toFixed(2) : '0.00';
-                    sensorData.accel.z = event.acceleration.z ? event.acceleration.z.toFixed(2) : '0.00';
+                let acc = event.accelerationIncludingGravity;
+                if (acc) {
+                    sensorData.accel.x = acc.x ? acc.x.toFixed(2) : '0.00';
+                    sensorData.accel.y = acc.y ? acc.y.toFixed(2) : '0.00';
+                    sensorData.accel.z = acc.z ? acc.z.toFixed(2) : '0.00';
+
+                    // Magnitud total para detección de pasos
+                    let magnitude = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
+                    let now = Date.now();
+                    
+                    // Umbral de paso y filtro de tiempo mínimo (350ms)
+                    if (magnitude > 11.8 && (now - lastStepTime) > 350) {
+                        stepCount++;
+                        lastStepTime = now;
+                        
+                        // Avanzar una zancada (aprox 0.7 metros) orientada por el rumbo actual
+                        let stepLength = 0.7;
+                        currentPos.x += stepLength * Math.sin(heading);
+                        currentPos.y += stepLength * Math.cos(heading);
+
+                        // Registrar punto en la trayectoria
+                        trackPoints.push({ x: currentPos.x, y: currentPos.y });
+                    }
                 }
 
                 if (event.rotationRate) {
+                    let rotZ = event.rotationRate.gamma || 0; // Rotación sobre el plano horizontal
                     sensorData.gyro.x = event.rotationRate.alpha ? event.rotationRate.alpha.toFixed(2) : '0.00';
                     sensorData.gyro.y = event.rotationRate.beta ? event.rotationRate.beta.toFixed(2) : '0.00';
-                    sensorData.gyro.z = event.rotationRate.gamma ? event.rotationRate.gamma.toFixed(2) : '0.00';
+                    sensorData.gyro.z = rotZ.toFixed(2);
+
+                    // Integrar velocidad angular para actualizar el rumbo (convertido a radianes)
+                    heading += (rotZ * Math.PI / 180) * 0.05; 
                 }
             });
 
-            // Escuchar GPS en tiempo real
+            // 2. Captura de GPS
             if (navigator.geolocation) {
                 navigator.geolocation.watchPosition(
                     (position) => {
                         sensorData.gps.lat = position.coords.latitude.toFixed(6);
                         sensorData.gps.lon = position.coords.longitude.toFixed(6);
-                        sensorData.gps.alt = position.coords.altitude !== null ? position.coords.altitude.toFixed(2) : 'N/A';
                         sensorData.gps.accuracy = position.coords.accuracy.toFixed(1);
                     },
-                    (error) => {
-                        console.error("Error GPS:", error.message);
-                    },
+                    (error) => { console.error("GPS Error:", error.message); },
                     { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
                 );
-            } else {
-                alert("La geolocalización no está soportada en este navegador.");
             }
 
-            // Bucle optimizado para refrescar la interfaz visual sin saturar el navegador
-            setInterval(updateUI, 100);
+            // Bucle de actualización visual cada 100ms
+            setInterval(refreshUI, 100);
         }
 
-        function updateUI() {
-            // Actualizar GPS
+        function refreshUI() {
+            // Actualizar etiquetas de texto
+            document.getElementById('step-count').innerText = stepCount;
+            document.getElementById('pos-x').innerText = currentPos.x.toFixed(2);
+            document.getElementById('pos-y').innerText = currentPos.y.toFixed(2);
+
             document.getElementById('gps-lat').innerText = sensorData.gps.lat;
             document.getElementById('gps-lon').innerText = sensorData.gps.lon;
-            document.getElementById('gps-alt').innerText = sensorData.gps.alt;
             document.getElementById('gps-acc').innerText = sensorData.gps.accuracy;
 
-            // Actualizar Acelerómetro
             document.getElementById('acc-x').innerText = sensorData.accel.x;
             document.getElementById('acc-y').innerText = sensorData.accel.y;
             document.getElementById('acc-z').innerText = sensorData.accel.z;
 
-            // Actualizar Giroscopio
             document.getElementById('gyro-x').innerText = sensorData.gyro.x;
             document.getElementById('gyro-y').innerText = sensorData.gyro.y;
             document.getElementById('gyro-z').innerText = sensorData.gyro.z;
+
+            // Dibujar el mapa de trayectoria en el Canvas
+            drawTrack();
+        }
+
+        function drawTrack() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            let centerX = canvas.width / 2;
+            let centerY = canvas.height / 2;
+            let scale = 15; // Escala: píxeles por metro
+
+            // Dibujar ejes de referencia
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, centerY); ctx.lineTo(canvas.width, centerY);
+            ctx.moveTo(centerX, 0); ctx.lineTo(centerX, canvas.height);
+            ctx.stroke();
+
+            if (trackPoints.length === 0) return;
+
+            // Dibujar la línea de la trayectoria
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            
+            trackPoints.forEach((pt, index) => {
+                // Invertimos Y para que coincida con coordenadas cartesianas en pantalla
+                let screenX = centerX + (pt.x * scale);
+                let screenY = centerY - (pt.y * scale);
+
+                if (index === 0) {
+                    ctx.moveTo(screenX, screenY);
+                } else {
+                    ctx.lineTo(screenX, screenY);
+                }
+            });
+            ctx.stroke();
+
+            // Dibujar el punto actual del dispositivo
+            let lastPt = trackPoints[trackPoints.length - 1];
+            let currentScreenX = centerX + (lastPt.x * scale);
+            let currentScreenY = centerY - (lastPt.y * scale);
+
+            ctx.fillStyle = '#4ade80';
+            ctx.beginPath();
+            ctx.arc(currentScreenX, currentScreenY, 5, 0, 2 * Math.PI);
+            ctx.fill();
         }
     </script>
 </body>
